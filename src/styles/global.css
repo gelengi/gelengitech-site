@@ -56,9 +56,9 @@ p { margin: 0; }
 /* Header */
 .site-header { position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92); backdrop-filter: saturate(140%) blur(8px); border-bottom: 1px solid var(--mist); }
 .site-header .wrap { display: flex; align-items: center; justify-content: space-between; height: 68px; }
-.brand { font-family: var(--display); font-size: 1.45rem; color: var(--ink); letter-spacing: -0.01em; display: flex; align-items: center; gap: .55rem; }
+.brand { font-family: var(--sans); font-weight: 600; letter-spacing: -0.02em; font-size: 1.3rem; color: var(--ink); letter-spacing: -0.01em; display: flex; align-items: center; gap: .55rem; }
 .brand:hover { text-decoration: none; }
-.brand-mark { width: 26px; height: 26px; }
+.brand-mark { width: 30px; height: 30px; }
 .nav { display: flex; align-items: center; gap: 1.6rem; }
 .nav a { color: var(--ink-2); font-size: .97rem; }
 .nav a[aria-current="page"] { color: var(--ink); border-bottom: 2px solid var(--signal); padding-bottom: 2px; }
