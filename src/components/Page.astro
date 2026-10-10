@@ -1,0 +1,30 @@
+---
+import Base from '../layouts/Base.astro';
+import Sections from './Sections.astro';
+import Ledger from './Ledger.astro';
+import { t, paths, type Lang } from '../content';
+interface Props { lang: Lang; page: 'home'|'services'|'work'|'about'|'contact'; }
+const { lang, page } = Astro.props; const s = t[lang]; const p = paths[lang];
+const heads = { services: s.pillars.heading, work: s.work.heading, about: s.about.heading, contact: s.contact.heading } as const;
+---
+<Base lang={lang} page={page}>
+  {page === 'home' ? (
+    <>
+      <section class="hero on-dark"><Ledger /><div class="wrap">
+        <p class="kicker">{s.hero.kicker}</p>
+        <h1>{s.hero.title}</h1>
+        <p class="lead">{s.hero.lead}</p>
+        <div class="actions"><a class="btn btn-primary" href={p.services}>{s.hero.primary}</a><a class="btn btn-ghost" href={p.contact}>{s.hero.secondary}</a></div>
+      </div></section>
+      <Sections lang={lang} show={['pillars','proof','work','cta']} />
+    </>
+  ) : page === 'services' ? (
+    <><div class="page-head"><div class="wrap"><h1>{heads.services}</h1></div></div><Sections lang={lang} show={['pillars','proof','cta']} /></>
+  ) : page === 'work' ? (
+    <><div class="page-head"><div class="wrap"><h1>{heads.work}</h1><p class="lead">{s.work.intro}</p></div></div><Sections lang={lang} show={['work','cta']} /></>
+  ) : page === 'about' ? (
+    <><div class="page-head"><div class="wrap"><h1>{heads.about}</h1></div></div><Sections lang={lang} show={['about','proof','cta']} /></>
+  ) : (
+    <><div class="page-head"><div class="wrap"><h1>{heads.contact}</h1></div></div><Sections lang={lang} show={['contact']} /></>
+  )}
+</Base>

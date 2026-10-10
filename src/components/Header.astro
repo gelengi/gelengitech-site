@@ -1,0 +1,23 @@
+---
+import { t, paths, type Lang } from '../content';
+import Mark from './Mark.astro';
+interface Props { lang: Lang; page: string; }
+const { lang, page } = Astro.props;
+const s = t[lang].nav; const p = paths[lang];
+const other: Lang = lang === 'tr' ? 'en' : 'tr';
+const links = [['services', s.services], ['work', s.work], ['about', s.about], ['contact', s.contact]] as const;
+---
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href={p.home}><Mark /> Gelengi Tech</a>
+    <button class="nav-toggle" aria-expanded="false" aria-controls="nav" data-toggle>Menü</button>
+    <nav class="nav" id="nav">
+      {links.map(([k, label]) => <a href={p[k]} aria-current={page === k ? 'page' : undefined}>{label}</a>)}
+      <a class="lang" href={paths[other][page as keyof typeof p]} hreflang={other} lang={other}>{s.switch}</a>
+    </nav>
+  </div>
+</header>
+<script>
+  const b = document.querySelector('[data-toggle]'); const n = document.getElementById('nav');
+  b?.addEventListener('click', () => { const o = n!.classList.toggle('open'); b.setAttribute('aria-expanded', String(o)); });
+</script>

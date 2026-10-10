@@ -1,0 +1,38 @@
+---
+import { t, paths, site, type Lang } from '../content';
+interface Props { lang: Lang; show: Array<'pillars'|'proof'|'work'|'about'|'contact'|'cta'>; }
+const { lang, show } = Astro.props; const s = t[lang]; const p = paths[lang];
+---
+{show.includes('pillars') && <section class="section"><div class="wrap">
+  <div class="section-head"><h2>{s.pillars.heading}</h2></div>
+  <div class="pillars">{s.pillars.items.map(i => <div class="pillar"><h3>{i.title}</h3><p>{i.body}</p></div>)}</div>
+</div></section>}
+{show.includes('proof') && <section class="section band"><div class="wrap">
+  <div class="section-head"><h2>{s.proof.heading}</h2></div>
+  <dl class="proof">{s.proof.items.map(i => <div><dt>{i.k}</dt><dd>{i.v}</dd></div>)}</dl>
+</div></section>}
+{show.includes('work') && <section class="section"><div class="wrap">
+  <div class="section-head"><h2>{s.work.heading}</h2><p class="muted">{s.work.intro}</p></div>
+  <div class="work-list">{s.work.items.map(i => <article class="work-item"><div class="tag">{i.tag}</div><div><h3>{i.title}</h3><p>{i.body}</p></div></article>)}</div>
+</div></section>}
+{show.includes('about') && <section class="section"><div class="wrap">
+  <div class="section-head"><h2>{s.about.heading}</h2></div>
+  <div class="about-grid">
+    <div class="prose lead"><p>{s.about.p1}</p><p>{s.about.p2}</p><p>{s.about.p3}</p></div>
+    <dl class="facts">{s.about.facts.map(f => <div><dt>{f.k}</dt><dd>{f.v}</dd></div>)}</dl>
+  </div>
+</div></section>}
+{show.includes('contact') && <section class="section"><div class="wrap">
+  <div class="contact-grid">
+    <div><h2>{s.contact.heading}</h2><p class="lead">{s.contact.lead}</p>
+      <div class="actions"><a class="btn btn-primary" href={`mailto:${site.email}`}>{s.contact.button}</a><a class="btn btn-ghost" href={site.phoneHref}>{site.phone}</a></div></div>
+    <dl class="contact-details">
+      <div><dt>{s.contact.emailLabel}</dt><dd><a href={`mailto:${site.email}`}>{site.email}</a></dd></div>
+      <div><dt>{s.contact.phoneLabel}</dt><dd><a href={site.phoneHref}>{site.phone}</a></dd></div>
+      <div><dt>{s.contact.addressLabel}</dt><dd>{site.address}</dd></div>
+    </dl>
+  </div>
+</div></section>}
+{show.includes('cta') && <section class="cta on-dark"><div class="wrap">
+  <h2>{s.contact.lead}</h2><a class="btn btn-primary" href={p.contact}>{s.nav.cta}</a>
+</div></section>}

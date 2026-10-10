@@ -1,0 +1,24 @@
+---
+import { t, paths, site, type Lang } from '../content';
+import Mark from './Mark.astro';
+interface Props { lang: Lang }
+const { lang } = Astro.props; const s = t[lang]; const p = paths[lang];
+const year = new Date().getFullYear();
+---
+<footer class="site-footer">
+  <div class="wrap">
+    <div>
+      <a class="brand" href={p.home}><Mark /> Gelengi Tech</a>
+      <p>{s.footer.tagline}</p>
+      <p class="legal">{site.legal} · {site.address}<br />© {year} {site.name}. {s.footer.rights}</p>
+    </div>
+    <nav>
+      <a href={p.services}>{s.nav.services}</a>
+      <a href={p.work}>{s.nav.work}</a>
+      <a href={p.about}>{s.nav.about}</a>
+      <a href={p.contact}>{s.nav.contact}</a>
+      <a href={`mailto:${site.email}`}>{site.email}</a>
+      <a href={site.linkedin} rel="noopener">LinkedIn</a>
+    </nav>
+  </div>
+</footer>
