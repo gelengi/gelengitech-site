@@ -16,8 +16,7 @@
     {
       "binding": "DB",
       "database_name": "gelengi-bookstore",
-      // `npx wrangler d1 create gelengi-bookstore` çıktısındaki database_id ile değiştirin
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "2f0664fd-86bd-4328-9170-3db015e7a319",
       "migrations_dir": "bookstore/migrations"
     }
   ]
