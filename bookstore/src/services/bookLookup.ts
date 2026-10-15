@@ -178,24 +178,24 @@ async function openLibrarySearch(params: Record<string, string>): Promise<BookDe
   }));
 }
 
-/** Serbest metinle arama: önce Google Books, olmazsa Open Library. Tekrarlar ayıklanır. */
+/** Serbest metinle arama: her sorgu Google Books ve Open Library'de birlikte aranır (Türkçe kapsamları farklı). */
 async function searchAll(queries: readonly string[], remote: RemoteSearch | null): Promise<BookDetails[]> {
   const found: BookDetails[] = [];
-  let googleWorks = remote !== null;
+  let googleFailures = 0;
   for (const query of queries) {
-    if (googleWorks && remote) {
-      try {
-        found.push(...(await remote(query)).map(googleToDetails));
-        continue;
-      } catch {
-        googleWorks = false; // kota/erişim sorunu — kalan sorgularda Open Library kullan
-      }
+    // Google geçici 503'ler verebiliyor; art arda iki hatadan sonra bu analizde vazgeç
+    const useGoogle = remote !== null && googleFailures < 2;
+    const [google, openLibrary] = await Promise.allSettled([
+      useGoogle && remote ? remote(query) : Promise.resolve([] as GoogleVolumeInfo[]),
+      openLibrarySearch({ q: query }),
+    ]);
+    if (google.status === 'fulfilled') {
+      found.push(...google.value.map(googleToDetails));
+      if (useGoogle) googleFailures = 0;
+    } else {
+      googleFailures += 1;
     }
-    try {
-      found.push(...(await openLibrarySearch({ q: query })));
-    } catch {
-      // tek sorgunun başarısızlığı akışı durdurmaz
-    }
+    if (openLibrary.status === 'fulfilled') found.push(...openLibrary.value);
   }
   const seen = new Set<string>();
   return found.filter((book) => {
