@@ -1,0 +1,13 @@
+{
+  "name": "Kitaplığım",
+  "short_name": "Kitaplığım",
+  "start_url": "/bookstore/",
+  "scope": "/bookstore/",
+  "display": "standalone",
+  "background_color": "#FDFCFB",
+  "theme_color": "#FDFCFB",
+  "icons": [
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

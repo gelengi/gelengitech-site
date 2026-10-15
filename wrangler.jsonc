@@ -2,9 +2,23 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "gelengitech-site",
   "compatibility_date": "2026-10-10",
+  // Statik site + /bookstore/api/* için küçük bir Worker (bookstore/worker/index.ts)
+  "main": "bookstore/worker/index.ts",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "404-page",
-    "html_handling": "auto-trailing-slash"
-  }
+    "html_handling": "auto-trailing-slash",
+    // Yalnızca API istekleri Worker'a uğrar; diğer tüm sayfalar doğrudan statik sunulur
+    "run_worker_first": ["/bookstore/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gelengi-bookstore",
+      // `npx wrangler d1 create gelengi-bookstore` çıktısındaki database_id ile değiştirin
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "bookstore/migrations"
+    }
+  ]
 }
