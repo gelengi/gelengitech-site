@@ -313,7 +313,7 @@ async function googleBooksLookup(env: Env, rawQuery: string): Promise<{ items: u
   if (env.GOOGLE_BOOKS_API_KEY) params.set('key', env.GOOGLE_BOOKS_API_KEY);
   let response: Response;
   try {
-    response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`, { cf: { cacheTtl: 86400, cacheEverything: true } });
+    response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`, { cf: { cacheTtlByStatus: { '200-299': 86400, '300-599': 0 }, cacheEverything: true } });
   } catch {
     throw new HttpError(502, 'Google Books’a ulaşılamadı');
   }
