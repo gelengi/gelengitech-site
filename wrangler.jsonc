@@ -4,6 +4,8 @@
   "compatibility_date": "2026-10-10",
   // Statik site + /bookstore/api/* için küçük bir Worker (bookstore/worker/index.ts)
   "main": "bookstore/worker/index.ts",
+  // Panelden eklenen değişkenler deploy sırasında silinmesin (şifreler yine de "Secret" tipinde tutulmalı)
+  "keep_vars": true,
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
