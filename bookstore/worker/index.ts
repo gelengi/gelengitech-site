@@ -318,7 +318,16 @@ async function googleBooksLookup(env: Env, rawQuery: string): Promise<{ items: u
     throw new HttpError(502, 'Google Books’a ulaşılamadı');
   }
   if (response.status === 429) throw new HttpError(503, 'Google Books kotası dolu — GOOGLE_BOOKS_API_KEY tanımlayın');
-  if (!response.ok) throw new HttpError(502, `Google Books yanıt vermedi (${response.status})`);
+  if (!response.ok) {
+    // Google'ın kendi açıklamasını ilet (ör. "API key not valid", "API has not been used in project") — anahtar değeri içermez
+    let detail = '';
+    try {
+      detail = ((await response.json()) as { error?: { message?: string } }).error?.message ?? '';
+    } catch {
+      // gövde JSON değil
+    }
+    throw new HttpError(502, `Google Books yanıt vermedi (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
+  }
   const data = (await response.json()) as { items?: { volumeInfo?: unknown }[] };
   return { items: (data.items ?? []).flatMap((item) => (item.volumeInfo ? [item.volumeInfo] : [])) };
 }
