@@ -456,12 +456,12 @@ export default function App() {
             book={editor.book}
             existingCoverSrc={editor.book ? db.coverUrl(editor.book) : ''}
             genres={genres}
-            ocrEnabled={config.ocrEnabled}
-            apiKey={config.googleBooksApiKey}
+            library={books}
+            remote={db.lookup}
             onClose={() => setEditor({ open: false, book: null })}
             onSubmit={submitBook}
           />
-          <BulkUploadModal open={bulkOpen} ocrEnabled={config.ocrEnabled} apiKey={config.googleBooksApiKey} onClose={() => setBulkOpen(false)} onSave={saveBulkBook} />
+          <BulkUploadModal open={bulkOpen} library={books} remote={db.lookup} onClose={() => setBulkOpen(false)} onSave={saveBulkBook} />
           <BulkBar count={selectedIds.size} busy={bulkBusy} onSetStatus={(status) => void bulkSetStatus(status)} onClear={() => setSelectedIds(new Set())} />
         </>
       )}

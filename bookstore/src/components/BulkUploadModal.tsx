@@ -1,10 +1,10 @@
-// Toplu fotoğraf yükleme — her fotoğraf bir kitap; kuyruk sırayla analiz edilir
+// Toplu fotoğraf yükleme — her fotoğraf bir kitabın ön kapağı; kuyruk sırayla analiz edilir
 
 import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Clock, ImagePlus, Save, Trash2, UploadCloud } from 'lucide-react';
-import type { BookInput, ReadingStatus } from '../types';
+import type { Book, BookDetails, BookInput, ReadingStatus } from '../types';
 import { READING_STATUSES } from '../types';
-import { analyzeBookPhotos } from '../services/bookLookup';
+import { analyzeBookPhotos, type RemoteSearch } from '../services/bookLookup';
 import { compressImage } from '../services/image';
 import { Modal, Spinner, errorMessage } from './ui';
 
@@ -22,22 +22,22 @@ interface QueueItem {
   pageCount: number;
   genre: string;
   publicationYear?: number;
-  isbn?: string;
   onlineCover?: string;
+  candidates: BookDetails[];
   useOnlineCover: boolean;
 }
 
 interface BulkUploadModalProps {
   open: boolean;
-  ocrEnabled: boolean;
-  apiKey: string;
+  library: readonly Book[];
+  remote: RemoteSearch | null;
   onClose: () => void;
   onSave: (input: BookInput) => Promise<void>;
 }
 
 const MAX_FILES = 60;
 
-export function BulkUploadModal({ open, ocrEnabled, apiKey, onClose, onSave }: BulkUploadModalProps) {
+export function BulkUploadModal({ open, library, remote, onClose, onSave }: BulkUploadModalProps) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [defaultStatus, setDefaultStatus] = useState<ReadingStatus>('Okunmadı');
   const [running, setRunning] = useState(false);
@@ -71,31 +71,31 @@ export function BulkUploadModal({ open, ocrEnabled, apiKey, onClose, onSave }: B
         if (generation.current !== myGeneration) return;
         const next = itemsRef.current.find((item) => item.status === 'pending');
         if (!next) break;
-        update(next.id, { status: 'processing', message: 'Barkod aranıyor…' });
+        update(next.id, { status: 'processing', message: 'Kapak okunuyor…' });
         try {
           const result = await analyzeBookPhotos([next.file], {
-            ocrEnabled,
-            apiKey,
-            onStep: (step) => update(next.id, { message: step === 'barcode' ? 'Barkod aranıyor…' : step === 'ocr' ? 'OCR ile okunuyor…' : 'Bilgiler getiriliyor…' }),
+            library,
+            remote,
+            onStep: (step) => update(next.id, { message: step === 'ocr' ? 'Kapak okunuyor…' : 'Bilgiler aranıyor…' }),
           });
-          if (result.details) {
-            const d = result.details;
+          const d = result.details;
+          if (d && d.title) {
             update(next.id, {
               status: 'completed',
-              message: `ISBN ${result.isbn ?? ''} · ${d.source ?? ''}`.trim(),
+              message: result.matched ? `${d.source ?? 'Çevrimiçi'} ile eşleşti — kontrol edin` : 'Kapaktan tahmin — kontrol edin',
               title: d.title,
               author: d.author,
               publisher: d.publisher,
               pageCount: d.pageCount,
               genre: d.genre,
               publicationYear: d.publicationYear,
-              isbn: result.isbn ?? d.isbn,
               onlineCover: d.coverUrl,
-              // Barkod genelde arka kapakta → çevrimiçi kapak varsa onu tercih et
-              useOnlineCover: Boolean(d.coverUrl),
+              // kendi ön kapak fotoğrafı daha net — çevrimiçi kapak isteğe bağlı
+              useOnlineCover: false,
+              candidates: result.candidates,
             });
           } else {
-            update(next.id, { status: 'error', message: result.message, isbn: result.isbn ?? undefined });
+            update(next.id, { status: 'error', message: result.message, candidates: result.candidates });
           }
         } catch (error) {
           update(next.id, { status: 'error', message: errorMessage(error) });
@@ -131,6 +131,7 @@ export function BulkUploadModal({ open, ocrEnabled, apiKey, onClose, onSave }: B
       pageCount: 0,
       genre: '',
       useOnlineCover: false,
+      candidates: [],
     }));
     setItems((current) => [...current, ...added]);
   };
@@ -159,7 +160,6 @@ export function BulkUploadModal({ open, ocrEnabled, apiKey, onClose, onSave }: B
         status: defaultStatus,
         notes: '',
         publicationYear: item.publicationYear ?? null,
-        isbn: item.isbn ?? null,
       };
       if (item.useOnlineCover && item.onlineCover) input.coverUrl = item.onlineCover;
       else input.image = await compressImage(item.file);
@@ -197,7 +197,7 @@ export function BulkUploadModal({ open, ocrEnabled, apiKey, onClose, onSave }: B
       locked={savingAll}
       size="xl"
       title="Çoklu Kitap Ekle"
-      subtitle="Her fotoğraf bir kitap sayılır. En iyi sonuç için arka kapaktaki barkodu çekin."
+      subtitle="Her fotoğraf bir kitabın ön kapağı sayılır; yazılar okunup bilgiler otomatik doldurulur."
       footer={
         <>
           <label className="mr-auto flex items-center gap-2 text-sm text-muted">
@@ -331,8 +331,38 @@ function QueueRow({ item, disabled, onChange, onRemove, onSave }: QueueRowProps)
             />
             <div className="flex gap-1.5">
               <input className="field py-1.5 text-[13px]" placeholder="Yazar" value={item.author} disabled={!editable || disabled} onChange={(event) => onChange({ author: event.target.value })} />
-              <input className="field w-20 py-1.5 text-[13px]" placeholder="Tür" value={item.genre} disabled={!editable || disabled} onChange={(event) => onChange({ genre: event.target.value })} />
+              <input className="field w-24 py-1.5 text-[13px]" placeholder="Tür" value={item.genre} disabled={!editable || disabled} onChange={(event) => onChange({ genre: event.target.value })} />
             </div>
+            <input className="field py-1.5 text-[13px]" placeholder="Yayınevi" value={item.publisher} disabled={!editable || disabled} onChange={(event) => onChange({ publisher: event.target.value })} />
+            {editable && item.candidates.length > 0 && (
+              <select
+                className="field py-1.5 text-xs text-muted"
+                value=""
+                disabled={disabled}
+                onChange={(event) => {
+                  const chosen = item.candidates[Number(event.target.value)];
+                  if (!chosen) return;
+                  onChange({
+                    title: chosen.title.split(':')[0]?.trim() || chosen.title,
+                    author: chosen.author || item.author,
+                    publisher: chosen.publisher || item.publisher,
+                    pageCount: chosen.pageCount || item.pageCount,
+                    genre: chosen.genre || item.genre,
+                    publicationYear: chosen.publicationYear ?? item.publicationYear,
+                    onlineCover: chosen.coverUrl,
+                    status: 'completed',
+                    message: `${chosen.source ?? 'Çevrimiçi'} sonucu seçildi`,
+                  });
+                }}
+              >
+                <option value="">Diğer sonuçlar ({item.candidates.length})…</option>
+                {item.candidates.map((candidate, index) => (
+                  <option key={`${candidate.title}-${index}`} value={index}>
+                    {[candidate.title, candidate.author, candidate.publisher].filter(Boolean).join(' · ')}
+                  </option>
+                ))}
+              </select>
+            )}
             <div className="flex items-center justify-between gap-2 pt-0.5">
               {item.onlineCover ? (
                 <label className="flex items-center gap-1.5 text-xs text-muted">

@@ -5,10 +5,6 @@ export interface AppConfig {
   /** Sahip oturum anahtarı (API'den alınır) */
   authToken: string;
   authExpiresAt: string;
-  /** İsteğe bağlı Google Books API anahtarı (kota için) */
-  googleBooksApiKey: string;
-  /** Barkod bulunamazsa künye sayfasında OCR (metin tanıma) çalıştır */
-  ocrEnabled: boolean;
   /** API kök adresi — web'de varsayılan aynı alan adı; mobil/harici kullanım için değiştirilebilir */
   apiBase: string;
 }
@@ -20,8 +16,6 @@ const CONFIG_KEY = 'kitapligim.config.v1';
 const DEFAULT_CONFIG: AppConfig = {
   authToken: '',
   authExpiresAt: '',
-  googleBooksApiKey: (import.meta.env.VITE_GOOGLE_BOOKS_API_KEY as string | undefined) ?? '',
-  ocrEnabled: true,
   apiBase: DEFAULT_API_BASE,
 };
 
@@ -45,7 +39,11 @@ export function writeJsonStorage(key: string, value: unknown): void {
 
 export function loadConfig(): AppConfig {
   const stored = readJsonStorage<Partial<AppConfig>>(CONFIG_KEY, {});
-  const config: AppConfig = { ...DEFAULT_CONFIG, ...stored };
+  const config: AppConfig = {
+    authToken: stored.authToken ?? DEFAULT_CONFIG.authToken,
+    authExpiresAt: stored.authExpiresAt ?? DEFAULT_CONFIG.authExpiresAt,
+    apiBase: stored.apiBase ?? DEFAULT_CONFIG.apiBase,
+  };
   if (!config.apiBase) config.apiBase = DEFAULT_API_BASE;
   if (config.authExpiresAt && Date.parse(config.authExpiresAt) <= Date.now()) {
     config.authToken = '';

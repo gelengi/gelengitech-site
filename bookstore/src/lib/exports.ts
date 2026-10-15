@@ -30,7 +30,6 @@ export async function exportToExcel(books: readonly Book[]): Promise<void> {
     Tür: book.genre,
     'Sayfa Sayısı': book.pageCount || '',
     'Basım Yılı': book.publicationYear ?? '',
-    ISBN: book.isbn ?? '',
     Durum: book.status,
     Notlar: book.notes,
   }));
