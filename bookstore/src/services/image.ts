@@ -56,19 +56,3 @@ export async function fileToCanvas(file: Blob, maxSide = 2000): Promise<HTMLCanv
     URL.revokeObjectURL(objectUrl);
   }
 }
-
-export function scaleCanvas(source: HTMLCanvasElement, scale: number, rotate90 = false): HTMLCanvasElement {
-  const w = Math.max(1, Math.round(source.width * scale));
-  const h = Math.max(1, Math.round(source.height * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = rotate90 ? h : w;
-  canvas.height = rotate90 ? w : h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return source;
-  if (rotate90) {
-    ctx.translate(canvas.width, 0);
-    ctx.rotate(Math.PI / 2);
-  }
-  ctx.drawImage(source, 0, 0, w, h);
-  return canvas;
-}

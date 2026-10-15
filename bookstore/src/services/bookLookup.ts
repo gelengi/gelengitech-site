@@ -1,134 +1,29 @@
-// Kitap tanıma servisi — yapay zekâ (Gemini) KULLANMAZ.
+// Kitap tanıma servisi — yapay zekâ servisi KULLANMAZ.
 //
-// Akış:
-//   1) Fotoğraflarda barkod ara (tarayıcının BarcodeDetector'ı, yoksa ZXing) → ISBN
-//   2) Barkod yoksa ve OCR açıksa: künye sayfasında metin tanıma (tesseract.js, tur+eng) → ISBN
-//   3) ISBN → Google Books, eksik alanlar Open Library ile tamamlanır
-//   4) Hiçbiri bulunamazsa kullanıcı ISBN veya başlık/yazar ile arar ya da elle doldurur
+// Akış (ön kapak fotoğrafı):
+//   1) Kapaktaki yazılar tarayıcıda okunur (tesseract.js, tur+eng, seyrek metin modu, iki ön işleme)
+//   2) Yazar ve yayınevi önce kendi kitaplığındaki adlarla eşleştirilir; kalan büyük puntolu kelimeler başlık tahmini olur
+//   3) Tahminle Google Books (Worker üzerinden, API anahtarı sunucuda) ve Open Library'de aranır
+//   4) Kapakla en iyi uyuşan sonuç seçilir; yoksa kapaktan okunan tahmin forma yazılır, kullanıcı düzeltir
 
-import type { BookDetails } from '../types';
+import type { Book, BookDetails } from '../types';
 import { mapGenre } from '../lib/genres';
-import { fileToCanvas, scaleCanvas } from './image';
+import { guessFromCover, mergeWords, scoreCandidate, fold, type CoverGuess, type OcrWord } from '../lib/coverText';
+import { fileToCanvas } from './image';
 
-// ------------------------------------------------------------------ ISBN yardımcıları
-
-export function normalizeIsbn(raw: string): string | null {
-  const cleaned = raw.replace(/[^0-9Xx]/g, '').toUpperCase();
-  if (cleaned.length === 13 && isValidIsbn13(cleaned)) return cleaned;
-  if (cleaned.length === 10 && isValidIsbn10(cleaned)) return isbn10To13(cleaned);
-  return null;
-}
-
-function isValidIsbn13(isbn: string): boolean {
-  if (!/^97[89]\d{10}$/.test(isbn)) return false;
-  let sum = 0;
-  for (let i = 0; i < 12; i++) sum += Number(isbn[i]) * (i % 2 === 0 ? 1 : 3);
-  return (10 - (sum % 10)) % 10 === Number(isbn[12]);
-}
-
-function isValidIsbn10(isbn: string): boolean {
-  if (!/^\d{9}[\dX]$/.test(isbn)) return false;
-  let sum = 0;
-  for (let i = 0; i < 10; i++) {
-    const char = isbn[i] ?? '0';
-    sum += (char === 'X' ? 10 : Number(char)) * (10 - i);
-  }
-  return sum % 11 === 0;
-}
-
-function isbn10To13(isbn10: string): string {
-  const core = `978${isbn10.slice(0, 9)}`;
-  let sum = 0;
-  for (let i = 0; i < 12; i++) sum += Number(core[i]) * (i % 2 === 0 ? 1 : 3);
-  return `${core}${(10 - (sum % 10)) % 10}`;
-}
-
-/** OCR metninden ISBN yakalar ("ISBN 978-605-..." veya yalnızca 13 hane) */
-export function findIsbnInText(text: string): string | null {
-  const candidates = text.match(/(?:97[89][\s-]?)?(?:\d[\s-]?){9}[\dXx]/g) ?? [];
-  for (const candidate of candidates) {
-    const isbn = normalizeIsbn(candidate);
-    if (isbn) return isbn;
-  }
-  return null;
-}
-
-// ------------------------------------------------------------------ Barkod
-
-interface DetectedBarcodeLike {
-  rawValue: string;
-}
-interface BarcodeDetectorLike {
-  detect(source: CanvasImageSource): Promise<DetectedBarcodeLike[]>;
-}
-interface BarcodeDetectorCtor {
-  new (options?: { formats?: string[] }): BarcodeDetectorLike;
-  getSupportedFormats?: () => Promise<string[]>;
-}
-
-// ZXing yalnızca gerektiğinde yüklenir (ziyaretçiler bu paketi hiç indirmez)
-type ZxingReader = InstanceType<typeof import('@zxing/browser')['BrowserMultiFormatReader']>;
-let zxingReaderPromise: Promise<ZxingReader> | null = null;
-function getZxingReader(): Promise<ZxingReader> {
-  if (!zxingReaderPromise) {
-    zxingReaderPromise = Promise.all([import('@zxing/browser'), import('@zxing/library')]).then(([browser, library]) => {
-      const hints = new Map<import('@zxing/library').DecodeHintType, unknown>([
-        [library.DecodeHintType.POSSIBLE_FORMATS, [library.BarcodeFormat.EAN_13, library.BarcodeFormat.EAN_8, library.BarcodeFormat.UPC_A]],
-        [library.DecodeHintType.TRY_HARDER, true],
-      ]);
-      return new browser.BrowserMultiFormatReader(hints);
-    });
-    zxingReaderPromise.catch(() => {
-      zxingReaderPromise = null;
-    });
-  }
-  return zxingReaderPromise;
-}
-
-async function detectWithNative(canvas: HTMLCanvasElement): Promise<string | null> {
-  const Ctor = (globalThis as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector;
-  if (!Ctor) return null;
-  try {
-    const detector = new Ctor({ formats: ['ean_13', 'ean_8', 'upc_a'] });
-    const results = await detector.detect(canvas);
-    for (const result of results) {
-      const isbn = normalizeIsbn(result.rawValue);
-      if (isbn) return isbn;
-    }
-  } catch {
-    // desteklenmiyor — ZXing'e düş
-  }
-  return null;
-}
-
-async function detectWithZxing(canvas: HTMLCanvasElement): Promise<string | null> {
-  const reader = await getZxingReader();
-  const attempts: HTMLCanvasElement[] = [canvas, scaleCanvas(canvas, 0.5), scaleCanvas(canvas, 0.75, true)];
-  for (const attempt of attempts) {
-    try {
-      const result = reader.decodeFromCanvas(attempt);
-      const isbn = normalizeIsbn(result.getText());
-      if (isbn) return isbn;
-    } catch {
-      // bu ölçekte bulunamadı
-    }
-  }
-  return null;
-}
-
-export async function detectIsbnBarcode(file: Blob): Promise<string | null> {
-  const canvas = await fileToCanvas(file, 1800);
-  return (await detectWithNative(canvas)) ?? (await detectWithZxing(canvas));
-}
-
-// ------------------------------------------------------------------ OCR (isteğe bağlı, tembel yüklenir)
+// ------------------------------------------------------------------ OCR (tembel yüklenir)
 
 type TesseractWorker = Awaited<ReturnType<typeof import('tesseract.js')['createWorker']>>;
 let ocrWorkerPromise: Promise<TesseractWorker> | null = null;
 
 async function getOcrWorker(): Promise<TesseractWorker> {
   if (!ocrWorkerPromise) {
-    ocrWorkerPromise = import('tesseract.js').then(({ createWorker }) => createWorker(['tur', 'eng']));
+    ocrWorkerPromise = import('tesseract.js').then(async ({ createWorker, PSM }) => {
+      const worker = await createWorker(['tur', 'eng']);
+      // Kapaklarda metin dağınık ve farklı puntolarda: seyrek metin modu çok daha iyi sonuç veriyor
+      await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
+      return worker;
+    });
     ocrWorkerPromise.catch(() => {
       ocrWorkerPromise = null;
     });
@@ -136,16 +31,89 @@ async function getOcrWorker(): Promise<TesseractWorker> {
   return ocrWorkerPromise;
 }
 
-export async function recognizeText(file: Blob): Promise<string> {
+/** Gri ton; `binary` ise kontrast germe + eşikleme (açık zemin/koyu yazı ve tersi için) */
+function preprocess(source: HTMLCanvasElement, binary: boolean): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return source;
+  ctx.drawImage(source, 0, 0);
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const pixels = image.data;
+  const luminance = new Uint8ClampedArray(pixels.length / 4);
+  const histogram = new Array<number>(256).fill(0);
+  for (let i = 0, p = 0; i < pixels.length; i += 4, p++) {
+    const value = Math.round(0.299 * (pixels[i] ?? 0) + 0.587 * (pixels[i + 1] ?? 0) + 0.114 * (pixels[i + 2] ?? 0));
+    luminance[p] = value;
+    histogram[value] = (histogram[value] ?? 0) + 1;
+  }
+  let low = 0;
+  let high = 255;
+  if (binary) {
+    // %1–%99 aralığını tam aralığa ger
+    const total = luminance.length;
+    let sum = 0;
+    for (let v = 0; v < 256; v++) {
+      sum += histogram[v] ?? 0;
+      if (sum >= total * 0.01) {
+        low = v;
+        break;
+      }
+    }
+    sum = 0;
+    for (let v = 255; v >= 0; v--) {
+      sum += histogram[v] ?? 0;
+      if (sum >= total * 0.01) {
+        high = v;
+        break;
+      }
+    }
+  }
+  const range = Math.max(1, high - low);
+  for (let i = 0, p = 0; i < pixels.length; i += 4, p++) {
+    let value = luminance[p] ?? 0;
+    if (binary) value = ((value - low) * 255) / range >= 128 ? 255 : 0;
+    pixels[i] = pixels[i + 1] = pixels[i + 2] = value;
+  }
+  ctx.putImageData(image, 0, 0);
+  return canvas;
+}
+
+/** OCR sonuçları tek bir koordinat sistemine (uzun kenar = 1000) çevrilir ki farklı ölçekler birleşebilsin */
+const REFERENCE_SIDE = 1000;
+/** Kapak yazıları her ölçekte farklı okunuyor; iki ölçek × iki ön işleme = dört geçiş birleştirilir */
+const OCR_SIDES = [1000, 1600] as const;
+
+/** Bir kapak fotoğrafındaki kelimeleri konum ve güven skoruyla döner */
+export async function readCoverWords(file: Blob): Promise<OcrWord[]> {
   const worker = await getOcrWorker();
-  const canvas = await fileToCanvas(file, 2000);
-  const { data } = await worker.recognize(canvas);
-  return data.text;
+  const passes: OcrWord[][] = [];
+  for (const side of OCR_SIDES) {
+    const base = await fileToCanvas(file, side);
+    const factor = REFERENCE_SIDE / Math.max(base.width, base.height);
+    for (const binary of [false, true]) {
+      const { data } = await worker.recognize(preprocess(base, binary), {}, { blocks: true });
+      const words: OcrWord[] = [];
+      for (const block of data.blocks ?? []) {
+        for (const paragraph of block.paragraphs) {
+          for (const line of paragraph.lines) {
+            for (const word of line.words) {
+              const { x0, y0, x1, y1 } = word.bbox;
+              words.push({ text: word.text, confidence: word.confidence, bbox: { x0: x0 * factor, y0: y0 * factor, x1: x1 * factor, y1: y1 * factor } });
+            }
+          }
+        }
+      }
+      passes.push(words);
+    }
+  }
+  return mergeWords(passes);
 }
 
 // ------------------------------------------------------------------ Çevrimiçi kaynaklar
 
-interface GoogleVolumeInfo {
+export interface GoogleVolumeInfo {
   title?: string;
   subtitle?: string;
   authors?: string[];
@@ -153,22 +121,18 @@ interface GoogleVolumeInfo {
   publishedDate?: string;
   pageCount?: number;
   categories?: string[];
-  industryIdentifiers?: { type: string; identifier: string }[];
   imageLinks?: { thumbnail?: string; smallThumbnail?: string };
 }
-interface GoogleVolumesResponse {
-  totalItems?: number;
-  items?: { volumeInfo?: GoogleVolumeInfo }[];
-}
+
+/** Google Books araması — Worker üzerinden (anahtar sunucuda). Ulaşılamazsa hata fırlatır. */
+export type RemoteSearch = (query: string) => Promise<GoogleVolumeInfo[]>;
 
 function yearFrom(value: string | undefined): number | undefined {
   const match = value ? /(\d{4})/.exec(value) : null;
   return match?.[1] ? Number(match[1]) : undefined;
 }
 
-function googleToDetails(info: GoogleVolumeInfo): BookDetails {
-  const isbn13 = info.industryIdentifiers?.find((id) => id.type === 'ISBN_13')?.identifier;
-  const isbn10 = info.industryIdentifiers?.find((id) => id.type === 'ISBN_10')?.identifier;
+export function googleToDetails(info: GoogleVolumeInfo): BookDetails {
   const thumb = info.imageLinks?.thumbnail ?? info.imageLinks?.smallThumbnail;
   return {
     title: [info.title, info.subtitle].filter(Boolean).join(': ').trim(),
@@ -177,93 +141,9 @@ function googleToDetails(info: GoogleVolumeInfo): BookDetails {
     pageCount: info.pageCount ?? 0,
     genre: mapGenre(info.categories ?? []),
     publicationYear: yearFrom(info.publishedDate),
-    isbn: normalizeIsbn(isbn13 ?? isbn10 ?? '') ?? undefined,
     coverUrl: thumb ? thumb.replace(/^http:/, 'https:').replace('&edge=curl', '') : undefined,
     source: 'Google Books',
   };
-}
-
-async function googleBooks(query: string, apiKey: string, maxResults = 1): Promise<BookDetails[]> {
-  const params = new URLSearchParams({ q: query, maxResults: String(maxResults), printType: 'books' });
-  if (apiKey) params.set('key', apiKey);
-  const response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`);
-  if (!response.ok) throw new Error(`Google Books yanıt vermedi (${response.status})`);
-  const data = (await response.json()) as GoogleVolumesResponse;
-  return (data.items ?? []).flatMap((item) => (item.volumeInfo ? [googleToDetails(item.volumeInfo)] : []));
-}
-
-interface OpenLibraryBook {
-  title?: string;
-  subtitle?: string;
-  authors?: { name: string }[];
-  publishers?: { name: string }[];
-  number_of_pages?: number;
-  subjects?: { name: string }[];
-  publish_date?: string;
-  cover?: { large?: string; medium?: string };
-}
-
-async function openLibraryByIsbn(isbn: string): Promise<BookDetails | null> {
-  const params = new URLSearchParams({ bibkeys: `ISBN:${isbn}`, format: 'json', jscmd: 'data' });
-  const response = await fetch(`https://openlibrary.org/api/books?${params.toString()}`);
-  if (!response.ok) return null;
-  const data = (await response.json()) as Record<string, OpenLibraryBook | undefined>;
-  const book = data[`ISBN:${isbn}`];
-  if (!book) return null;
-  return {
-    title: [book.title, book.subtitle].filter(Boolean).join(': ').trim(),
-    author: (book.authors ?? []).map((a) => a.name).join(', '),
-    publisher: book.publishers?.[0]?.name ?? '',
-    pageCount: book.number_of_pages ?? 0,
-    genre: mapGenre((book.subjects ?? []).map((s) => s.name)),
-    publicationYear: yearFrom(book.publish_date),
-    isbn,
-    coverUrl: book.cover?.large ?? book.cover?.medium ?? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg`,
-    source: 'Open Library',
-  };
-}
-
-function mergeDetails(primary: BookDetails | null, secondary: BookDetails | null): BookDetails | null {
-  if (!primary) return secondary;
-  if (!secondary) return primary;
-  return {
-    ...primary,
-    title: primary.title || secondary.title,
-    author: primary.author || secondary.author,
-    publisher: primary.publisher || secondary.publisher,
-    pageCount: primary.pageCount || secondary.pageCount,
-    genre: primary.genre || secondary.genre,
-    publicationYear: primary.publicationYear ?? secondary.publicationYear,
-    coverUrl: primary.coverUrl ?? secondary.coverUrl,
-  };
-}
-
-/** ISBN ile kitap bilgisi — iki kaynağı birleştirir */
-export async function lookupByIsbn(isbn: string, apiKey = ''): Promise<BookDetails | null> {
-  const [google, openLibrary] = await Promise.allSettled([googleBooks(`isbn:${isbn}`, apiKey), openLibraryByIsbn(isbn)]);
-  const g = google.status === 'fulfilled' ? (google.value[0] ?? null) : null;
-  const o = openLibrary.status === 'fulfilled' ? openLibrary.value : null;
-  const merged = mergeDetails(g, o);
-  if (merged) merged.isbn = isbn;
-  if (!merged && google.status === 'rejected' && openLibrary.status === 'rejected') {
-    throw new Error('Kitap kaynaklarına ulaşılamadı');
-  }
-  return merged;
-}
-
-/** Başlık/yazar ile arama — kullanıcıya seçmesi için birkaç sonuç döner */
-export async function searchBooks(title: string, author: string, apiKey = ''): Promise<BookDetails[]> {
-  const parts: string[] = [];
-  if (title.trim()) parts.push(`intitle:${title.trim()}`);
-  if (author.trim()) parts.push(`inauthor:${author.trim()}`);
-  if (parts.length === 0) return [];
-  try {
-    const results = await googleBooks(parts.join(' '), apiKey, 6);
-    if (results.length > 0) return results;
-  } catch {
-    // Google kotası dolmuş olabilir (anahtarsız ortak kota) — Open Library'ye düş
-  }
-  return openLibrarySearch(title, author);
 }
 
 interface OpenLibrarySearchDoc {
@@ -273,93 +153,168 @@ interface OpenLibrarySearchDoc {
   publisher?: string[];
   number_of_pages_median?: number;
   first_publish_year?: number;
-  isbn?: string[];
   subject?: string[];
   cover_i?: number;
 }
 
-async function openLibrarySearch(title: string, author: string): Promise<BookDetails[]> {
-  const params = new URLSearchParams({ limit: '6', fields: 'title,subtitle,author_name,publisher,number_of_pages_median,first_publish_year,isbn,subject,cover_i' });
-  if (title.trim()) params.set('title', title.trim());
-  if (author.trim()) params.set('author', author.trim());
-  const response = await fetch(`https://openlibrary.org/search.json?${params.toString()}`);
+async function openLibrarySearch(params: Record<string, string>): Promise<BookDetails[]> {
+  const search = new URLSearchParams({
+    limit: '8',
+    fields: 'title,subtitle,author_name,publisher,number_of_pages_median,first_publish_year,subject,cover_i',
+    ...params,
+  });
+  const response = await fetch(`https://openlibrary.org/search.json?${search.toString()}`);
   if (!response.ok) throw new Error(`Open Library yanıt vermedi (${response.status})`);
   const data = (await response.json()) as { docs?: OpenLibrarySearchDoc[] };
-  return (data.docs ?? []).map((doc) => {
-    const isbn = (doc.isbn ?? []).map((value) => normalizeIsbn(value)).find((value): value is string => value !== null);
-    return {
-      title: [doc.title, doc.subtitle].filter(Boolean).join(': ').trim(),
-      author: (doc.author_name ?? []).join(', '),
-      publisher: doc.publisher?.[0] ?? '',
-      pageCount: doc.number_of_pages_median ?? 0,
-      genre: mapGenre(doc.subject ?? []),
-      publicationYear: doc.first_publish_year,
-      isbn,
-      coverUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : undefined,
-      source: 'Open Library' as const,
-    };
+  return (data.docs ?? []).map((doc) => ({
+    title: [doc.title, doc.subtitle].filter(Boolean).join(': ').trim(),
+    author: (doc.author_name ?? []).join(', '),
+    publisher: doc.publisher?.[0] ?? '',
+    pageCount: doc.number_of_pages_median ?? 0,
+    genre: mapGenre(doc.subject ?? []),
+    publicationYear: doc.first_publish_year,
+    coverUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : undefined,
+    source: 'Open Library' as const,
+  }));
+}
+
+/** Serbest metinle arama: önce Google Books, olmazsa Open Library. Tekrarlar ayıklanır. */
+async function searchAll(queries: readonly string[], remote: RemoteSearch | null): Promise<BookDetails[]> {
+  const found: BookDetails[] = [];
+  let googleWorks = remote !== null;
+  for (const query of queries) {
+    if (googleWorks && remote) {
+      try {
+        found.push(...(await remote(query)).map(googleToDetails));
+        continue;
+      } catch {
+        googleWorks = false; // kota/erişim sorunu — kalan sorgularda Open Library kullan
+      }
+    }
+    try {
+      found.push(...(await openLibrarySearch({ q: query })));
+    } catch {
+      // tek sorgunun başarısızlığı akışı durdurmaz
+    }
+  }
+  const seen = new Set<string>();
+  return found.filter((book) => {
+    const key = `${fold(book.title)}|${fold(book.author)}`;
+    if (!book.title || seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
+}
+
+/** Başlık/yazar ile elle arama — formdaki "çevrimiçi ara" düğmesi */
+export async function searchBooks(title: string, author: string, remote: RemoteSearch | null): Promise<BookDetails[]> {
+  const parts: string[] = [];
+  if (title.trim()) parts.push(`intitle:${title.trim()}`);
+  if (author.trim()) parts.push(`inauthor:${author.trim()}`);
+  if (parts.length === 0) return [];
+  if (remote) {
+    try {
+      const results = (await remote(parts.join(' '))).map(googleToDetails);
+      if (results.length > 0) return results.slice(0, 8);
+    } catch {
+      // Open Library'ye düş
+    }
+  }
+  const params: Record<string, string> = {};
+  if (title.trim()) params.title = title.trim();
+  if (author.trim()) params.author = author.trim();
+  return openLibrarySearch(params);
 }
 
 // ------------------------------------------------------------------ Ana akış
 
-export type AnalysisStep = 'barcode' | 'ocr' | 'lookup';
+export type AnalysisStep = 'ocr' | 'lookup';
 
 export interface AnalysisResult {
-  isbn: string | null;
+  /** Forma yazılacak en iyi bilgi (çevrimiçi eşleşme veya kapaktan tahmin) */
   details: BookDetails | null;
-  /** Kullanıcıya gösterilecek kısa açıklama */
+  /** Eşleşme kesin değilse kullanıcının seçebileceği adaylar */
+  candidates: BookDetails[];
+  /** Çevrimiçi kaynakta kapakla uyuşan kayıt bulundu mu */
+  matched: boolean;
+  guess: CoverGuess | null;
   message: string;
 }
 
 export interface AnalyzeOptions {
-  ocrEnabled: boolean;
-  apiKey: string;
+  library: readonly Book[];
+  remote: RemoteSearch | null;
   onStep?: (step: AnalysisStep) => void;
 }
 
-/** Bir kitaba ait fotoğrafları (ön/arka kapak, künye) inceleyip bilgileri çıkarır */
+const MATCH_THRESHOLD = 0.6;
+
+/** Yazarın kitaplıktaki en sık türü — çevrimiçi kaynak tür vermezse kullanılır */
+function genreFromLibrary(author: string, library: readonly Book[]): string {
+  const surname = fold(author.split(/[,&]/)[0]?.trim().split(/\s+/).pop() ?? '');
+  if (!surname) return '';
+  const counts = new Map<string, number>();
+  for (const book of library) {
+    if (book.genre && fold(book.author).includes(surname)) counts.set(book.genre, (counts.get(book.genre) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+}
+
+/** Kapak fotoğraf(lar)ından kitap bilgisi çıkarır. İlk fotoğraf ön kapak kabul edilir. */
 export async function analyzeBookPhotos(files: readonly Blob[], options: AnalyzeOptions): Promise<AnalysisResult> {
-  let isbn: string | null = null;
+  options.onStep?.('ocr');
+  const words: OcrWord[] = [];
+  for (const file of files.slice(0, 3)) words.push(...(await readCoverWords(file)));
 
-  options.onStep?.('barcode');
-  for (const file of files) {
-    isbn = await detectIsbnBarcode(file);
-    if (isbn) break;
-  }
-
-  if (!isbn && options.ocrEnabled) {
-    options.onStep?.('ocr');
-    // Künye sayfası genelde son fotoğraftır; sondan başa tara
-    for (const file of [...files].reverse()) {
-      isbn = findIsbnInText(await recognizeText(file));
-      if (isbn) break;
-    }
-  }
-
-  if (!isbn) {
-    return {
-      isbn: null,
-      details: null,
-      message: options.ocrEnabled
-        ? 'Barkod veya ISBN bulunamadı. ISBN yazabilir ya da başlık/yazar ile arayabilirsiniz.'
-        : 'Barkod bulunamadı. Künye sayfası için Ayarlar’dan OCR’ı açabilir ya da ISBN yazabilirsiniz.',
-    };
+  const hints = {
+    authors: [...new Set(options.library.map((book) => book.author).filter(Boolean))],
+    publishers: [...new Set(options.library.map((book) => book.publisher).filter(Boolean))],
+  };
+  const guess = guessFromCover(words, hints);
+  if (!guess.title && !guess.author) {
+    return { details: null, candidates: [], matched: false, guess, message: 'Kapakta okunabilir yazı bulunamadı. Bilgileri elle girin veya başlıkla arayın.' };
   }
 
   options.onStep?.('lookup');
-  let details: BookDetails | null;
-  try {
-    details = await lookupByIsbn(isbn, options.apiKey);
-  } catch (error) {
-    // ISBN bulundu ama kaynaklara ulaşılamadı — ISBN'i kaybetme
-    return { isbn, details: null, message: `ISBN ${isbn} okundu; ancak ${error instanceof Error ? error.message.toLocaleLowerCase('tr') : 'kaynaklara ulaşılamadı'}. Daha sonra “Getir” ile tekrar deneyin.` };
+  const queries = [...new Set([guess.query, [guess.title, guess.author ?? ''].join(' ').trim(), guess.narrowQuery].filter((query) => query.length >= 3))];
+  const found = await searchAll(queries, options.remote);
+  const ranked = found
+    .map((book) => ({ book, score: scoreCandidate(book, guess) }))
+    .sort((a, b) => b.score - a.score);
+  const best = ranked[0];
+
+  if (best && best.score >= MATCH_THRESHOLD) {
+    const details: BookDetails = {
+      ...best.book,
+      title: best.book.title.split(':')[0]?.trim() || best.book.title,
+      publisher: best.book.publisher || guess.publisher || '',
+      genre: best.book.genre || genreFromLibrary(best.book.author, options.library),
+    };
+    return {
+      details,
+      candidates: ranked.slice(1, 6).filter((item) => item.score >= 0.4).map((item) => item.book),
+      matched: true,
+      guess,
+      message: `${details.source ?? 'Çevrimiçi kaynak'} ile eşleşti. Lütfen kontrol edin.`,
+    };
   }
+
+  // Kesin eşleşme yok → kapaktan okunan tahmin
+  const author = guess.author ?? '';
   return {
-    isbn,
-    details,
-    message: details
-      ? `ISBN ${isbn} — bilgiler ${details.source ?? 'çevrimiçi kaynaktan'} getirildi. Lütfen kontrol edin.`
-      : `ISBN ${isbn} bulundu ama kaynaklarda kaydı yok. Bilgileri elle doldurun.`,
+    details: {
+      title: guess.title,
+      author,
+      publisher: guess.publisher ?? '',
+      pageCount: 0,
+      genre: author ? genreFromLibrary(author, options.library) : '',
+    },
+    candidates: ranked.slice(0, 5).map((item) => item.book),
+    matched: false,
+    guess,
+    message:
+      ranked.length > 0
+        ? 'Kapaktan okunan tahmin yazıldı; aşağıdaki sonuçlardan biri doğruysa seçin.'
+        : 'Kapaktan okunan tahmin yazıldı; çevrimiçi kayıt bulunamadı. Lütfen kontrol edin.',
   };
 }

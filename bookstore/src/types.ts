@@ -27,7 +27,6 @@ export interface BookDetails {
   pageCount: number;
   genre: string;
   publicationYear?: number;
-  isbn?: string;
   /** Çevrimiçi kaynaktan bulunan kapak görseli (Google Books / Open Library) */
   coverUrl?: string;
   /** Bilginin geldiği kaynak */

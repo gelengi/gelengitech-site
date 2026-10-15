@@ -1,6 +1,6 @@
 # Kitaplığım — gelengitech.com/bookstore
 
-Kişisel kütüphane kataloğu. Kitap fotoğrafından (arka kapak barkodu veya künye sayfası) bilgileri otomatik çıkarır. Grid, 3B ahşap raf (4 tema) ve Excel'e aktarılabilen özet liste görünümleri vardır. Ziyaretçiler kitaplığı görüntüler; ekleme ve düzenleme yalnızca sahip girişiyle yapılır.
+Kişisel kütüphane kataloğu. Ön kapak fotoğrafından kitap bilgilerini otomatik çıkarır (yapay zekâ servisi olmadan). Grid, 3B ahşap raf (4 tema) ve Excel'e aktarılabilen özet liste görünümleri vardır. Ziyaretçiler kitaplığı görüntüler; ekleme ve düzenleme yalnızca sahip girişiyle yapılır.
 
 ## Mimari
 
@@ -13,9 +13,9 @@ gelengitech.com (Cloudflare Worker, wrangler.jsonc)
 
 - **Veritabanı:** Cloudflare D1 (`gelengi-bookstore`). Kitaplar `books` tablosunda, kapak görselleri `covers` tablosunda (BLOB) tutulur. Ek hizmet veya ücretli plan gerekmez; D1 ücretsiz katmanı kişisel kütüphane için fazlasıyla yeterli.
 - **Kitap tanıma (yapay zekâ yok):**
-  1. Barkod → ISBN (tarayıcının `BarcodeDetector`'ı, yoksa ZXing)
-  2. Barkod yoksa künye sayfasında OCR (tesseract.js, Türkçe+İngilizce, isteğe bağlı)
-  3. ISBN → Google Books, eksik alanlar Open Library'den tamamlanır
+  1. Ön kapakta OCR (tesseract.js, Türkçe+İngilizce, seyrek metin modu, gri + eşiklenmiş iki geçiş)
+  2. Yazar/yayınevi önce kitaplıktaki adlarla eşleştirilir; kalan büyük puntolu kelimeler başlık tahmini olur (`src/lib/coverText.ts`)
+  3. Tahminle Google Books (Worker vekili `/api/lookup`, anahtar sunucuda) ve Open Library'de aranır; kapakla en iyi uyuşan sonuç seçilir, yoksa tahmin forma yazılır
   4. Başlık/yazar ile çevrimiçi arama ve elle düzenleme her zaman mümkün
 - **Yetki:** Okuma uçları herkese açık. Yazma uçları `Authorization: Bearer <token>` ister. Token, `ADMIN_PASSWORD` ile giriş yapınca 30 gün geçerli HMAC imzalı olarak verilir.
 - **Görseller:** İstemcide en fazla 800×1200 px ve JPEG 0.7 kalitesine sıkıştırılır (~100–250 KB).
@@ -71,6 +71,7 @@ Kök: `https://gelengitech.com/bookstore/api`. Tipler `src/types.ts` içinde. CO
 | GET | `/health` | – | Sağlık kontrolü |
 | POST | `/auth/login` `{password}` | – | `{token, expiresAt}` döner |
 | GET | `/auth/me` | (token) | `{authenticated}` |
+| GET | `/lookup?q=…` | ✓ | Google Books araması (vekil; `GOOGLE_BOOKS_API_KEY` sunucuda). `{items: volumeInfo[]}` |
 | GET | `/books` | – | Tüm kitaplar (`Book[]`) |
 | GET | `/books/:id` | – | Tek kitap |
 | GET | `/books/:id/cover?v=…` | – | Kapak görseli (uzun süreli önbellek) |
@@ -89,9 +90,9 @@ bookstore/
 │   ├── types.ts             Book, BookDetails, BookInput (web + worker + mobil)
 │   ├── App.tsx              Sayfa düzeni, filtre motoru bağlantısı, toplu işlemler
 │   ├── services/
-│   │   ├── config.ts        localStorage ayarları (oturum, OCR, Google Books anahtarı)
+│   │   ├── config.ts        localStorage ayarları (oturum, API adresi)
 │   │   ├── db.ts            API istemcisi
-│   │   ├── bookLookup.ts    Barkod/OCR → ISBN → Google Books/Open Library
+│   │   ├── bookLookup.ts    Kapak OCR → eşleştirme → Google Books/Open Library
 │   │   └── image.ts         Canvas sıkıştırma
 │   ├── lib/                 filtreler, tür eşlemesi, Excel/ZIP dışa aktarma
 │   └── components/          Header, Sidebar, BookCard, LibraryView, ListView,
@@ -101,9 +102,9 @@ bookstore/
 
 ## Notlar
 
-- **Google Books kotası:** Anahtarsız çalışır. Çok sayıda toplu eklemede Ayarlar'dan ücretsiz bir Google Books API anahtarı girilebilir.
+- **Google Books anahtarı:** Anahtarsız ortak kota sürekli dolu olduğundan Worker'a `GOOGLE_BOOKS_API_KEY` secret'ı tanımlayın (Google Cloud → Books API → API key; günde 1000 sorgu ücretsiz). Tanımlı değilse yalnızca Open Library + kapak tahmini kullanılır.
 - **Türkçe yayınlar:** Google Books ve Open Library kapsamı her kitapta tam değildir. Özellikle **tür** alanı boş gelebilir, kaydetmeden önce kontrol edin.
-- **OCR:** İlk kullanımda tarayıcı ~15 MB dil verisini (jsDelivr CDN) indirir. Ayarlar'dan kapatılabilir.
+- **OCR:** İlk kullanımda tarayıcı ~15 MB dil verisini (jsDelivr CDN) indirir. Stilize/el yazısı kapaklarda başlık eksik okunabilir; kaydetmeden önce kontrol edin.
 - **Yedek:** "Fotoğrafları Yedekle" tüm kapakları ve `books.json` dosyasını `bookstore_photos_TARIH.zip` olarak indirir.
 - **Mobil:** Arayüz responsive ve PWA manifesti var. Yerel mobil uygulama aynı API'yi kullanabilir.
 - **Pages mi Workers mı?** API, `wrangler.jsonc` içindeki Worker (`main`) üzerinden çalışır. Bu, `npm run deploy` (wrangler deploy) veya Cloudflare **Workers Builds** ile yayında geçerlidir. Site bir **Pages** projesi olarak bağlıysa Worker kodu çalışmaz; API'nin `functions/` klasörüne taşınması gerekir.

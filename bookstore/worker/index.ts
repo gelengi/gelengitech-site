@@ -21,6 +21,8 @@ export interface Env {
   ADMIN_PASSWORD?: string;
   /** `wrangler secret put SESSION_SECRET` (uzun rastgele bir metin) */
   SESSION_SECRET?: string;
+  /** İsteğe bağlı: `wrangler secret put GOOGLE_BOOKS_API_KEY` — kapak tanımada Google Books araması için */
+  GOOGLE_BOOKS_API_KEY?: string;
 }
 
 const API_PREFIX = '/bookstore/api';
@@ -302,6 +304,25 @@ async function requireAuth(request: Request, env: Env): Promise<void> {
   if (!(await isAuthenticated(request, env))) throw new HttpError(401, 'Bu işlem için giriş yapmalısınız');
 }
 
+// ---------------------------------------------------------------- Google Books vekili
+
+async function googleBooksLookup(env: Env, rawQuery: string): Promise<{ items: unknown[] }> {
+  const query = rawQuery.trim().slice(0, 200);
+  if (!query) throw new HttpError(400, 'Arama metni gerekli');
+  const params = new URLSearchParams({ q: query, maxResults: '10', printType: 'books' });
+  if (env.GOOGLE_BOOKS_API_KEY) params.set('key', env.GOOGLE_BOOKS_API_KEY);
+  let response: Response;
+  try {
+    response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`, { cf: { cacheTtl: 86400, cacheEverything: true } });
+  } catch {
+    throw new HttpError(502, 'Google Books’a ulaşılamadı');
+  }
+  if (response.status === 429) throw new HttpError(503, 'Google Books kotası dolu — GOOGLE_BOOKS_API_KEY tanımlayın');
+  if (!response.ok) throw new HttpError(502, `Google Books yanıt vermedi (${response.status})`);
+  const data = (await response.json()) as { items?: { volumeInfo?: unknown }[] };
+  return { items: (data.items ?? []).flatMap((item) => (item.volumeInfo ? [item.volumeInfo] : [])) };
+}
+
 // ---------------------------------------------------------------- routes
 
 async function handleApi(request: Request, env: Env, path: string): Promise<Response> {
@@ -330,6 +351,12 @@ async function handleApi(request: Request, env: Env, path: string): Promise<Resp
     if (segments[1] === 'me' && method === 'GET') {
       return json({ authenticated: await isAuthenticated(request, env) });
     }
+  }
+
+  // GET /lookup?q=... — Google Books araması (yalnızca sahip; anahtar sunucuda kalır, mobil de kullanır)
+  if (segments[0] === 'lookup' && segments.length === 1 && method === 'GET') {
+    await requireAuth(request, env);
+    return json(await googleBooksLookup(env, new URL(request.url).searchParams.get('q') ?? ''));
   }
 
   if (segments[0] !== 'books') throw new HttpError(404, 'Bulunamadı');

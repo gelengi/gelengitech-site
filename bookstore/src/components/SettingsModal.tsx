@@ -52,7 +52,7 @@ export function SettingsModal({ open, config, canEdit, onClose, onSave, onLogin,
       open={open}
       onClose={onClose}
       title="Ayarlar"
-      subtitle="Sahip girişi ve kitap tanıma seçenekleri"
+      subtitle="Sahip girişi ve kitap tanıma"
       footer={
         <>
           <button type="button" className="btn-ghost" onClick={onClose}>
@@ -62,7 +62,7 @@ export function SettingsModal({ open, config, canEdit, onClose, onSave, onLogin,
             type="button"
             className="btn-primary"
             onClick={() => {
-              onSave({ ...draft, apiBase: draft.apiBase.trim() || DEFAULT_API_BASE, googleBooksApiKey: draft.googleBooksApiKey.trim() });
+              onSave({ ...draft, apiBase: draft.apiBase.trim() || DEFAULT_API_BASE });
               onClose();
             }}
           >
@@ -116,33 +116,15 @@ export function SettingsModal({ open, config, canEdit, onClose, onSave, onLogin,
             <ScanText size={18} className="text-accent" />
             <h3 className="font-serif text-base font-semibold">Kitap Tanıma</h3>
           </div>
-          <p className="-mt-2 text-sm text-muted">
-            Fotoğraftaki barkoddan ISBN okunur; bilgiler Google Books ve Open Library’den getirilir. Yapay zekâ servisi kullanılmaz.
+          <p className="-mt-2 text-sm leading-relaxed text-muted">
+            Ön kapak fotoğrafındaki yazılar tarayıcıda okunur (OCR). Yazar ve yayınevi önce kitaplığınızdaki adlarla eşleştirilir, ardından
+            Google Books ve Open Library’de aranır. Yapay zekâ servisi kullanılmaz; ilk kullanımda ~15 MB dil verisi indirilir.
           </p>
-          <label className="flex cursor-pointer items-start justify-between gap-4 rounded-xl border border-line bg-white p-3.5">
-            <span>
-              <span className="block text-sm font-medium">Künye sayfasında metin tanıma (OCR)</span>
-              <span className="mt-0.5 block text-xs text-muted">Barkod bulunamazsa ISBN’i künye sayfasından okur. İlk kullanımda ~15 MB dil verisi indirilir.</span>
-            </span>
-            <input
-              type="checkbox"
-              className="mt-1 h-5 w-5 shrink-0 accent-[#1a1a1a]"
-              checked={draft.ocrEnabled}
-              onChange={(event) => setDraft({ ...draft, ocrEnabled: event.target.checked })}
-            />
-          </label>
-          <label className="block">
-            <span className="label">Google Books API Anahtarı (isteğe bağlı)</span>
-            <input
-              className="field font-mono text-xs"
-              placeholder="AIza…"
-              value={draft.googleBooksApiKey}
-              onChange={(event) => setDraft({ ...draft, googleBooksApiKey: event.target.value })}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <span className="mt-1 block text-xs text-muted">Anahtarsız da çalışır; çok sayıda toplu eklemede kota aşımını önler.</span>
-          </label>
+          <p className="rounded-xl border border-line bg-white p-3.5 text-xs leading-relaxed text-muted">
+            Türkçe kitaplarda en iyi sonuç için sunucuda <code className="font-mono text-ink">GOOGLE_BOOKS_API_KEY</code> tanımlı olmalı
+            (Cloudflare → Worker → Settings → Variables and Secrets). Anahtar tarayıcıya gönderilmez; tanımlı değilse yalnızca Open Library ve kapak
+            tahmini kullanılır.
+          </p>
         </section>
 
         {/* Gelişmiş */}

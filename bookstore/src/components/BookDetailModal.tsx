@@ -44,7 +44,6 @@ export function BookDetailModal({ book, coverSrc, canEdit, onClose, onEdit, onDe
               <Item label="Tür" value={book.genre} />
               <Item label="Sayfa" value={book.pageCount ? String(book.pageCount) : ''} />
               <Item label="Basım Yılı" value={book.publicationYear ? String(book.publicationYear) : ''} />
-              {book.isbn && <Item label="ISBN" value={book.isbn} mono />}
               <Item label="Eklenme" value={new Date(book.createdAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })} />
             </dl>
 

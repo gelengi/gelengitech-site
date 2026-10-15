@@ -1,11 +1,11 @@
-// Tekli kitap ekleme / düzenleme — fotoğraflardan (barkod/OCR) bilgi çıkarma + çevrimiçi arama
+// Tekli kitap ekleme / düzenleme — ön kapak fotoğrafından (OCR) bilgi çıkarma + çevrimiçi arama
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Barcode, Camera, Globe, ImagePlus, ScanSearch, Search, Star, Trash2, Wand2 } from 'lucide-react';
+import { Camera, ImagePlus, ScanSearch, Search, Star, Trash2, Wand2 } from 'lucide-react';
 import type { Book, BookDetails, BookInput, ReadingStatus } from '../types';
 import { READING_STATUSES } from '../types';
 import { DEFAULT_GENRES } from '../lib/genres';
-import { analyzeBookPhotos, lookupByIsbn, normalizeIsbn, searchBooks, type AnalysisStep } from '../services/bookLookup';
+import { analyzeBookPhotos, searchBooks, type AnalysisStep, type RemoteSearch } from '../services/bookLookup';
 import { compressImage } from '../services/image';
 import { BookCover } from './BookCover';
 import { Modal, Spinner, errorMessage } from './ui';
@@ -25,7 +25,6 @@ interface FormState {
   pageCount: string;
   genre: string;
   publicationYear: string;
-  isbn: string;
   status: ReadingStatus;
   notes: string;
 }
@@ -37,15 +36,13 @@ const EMPTY_FORM: FormState = {
   pageCount: '',
   genre: '',
   publicationYear: '',
-  isbn: '',
   status: 'Okunmadı',
   notes: '',
 };
 
 const STEP_LABEL: Record<AnalysisStep, string> = {
-  barcode: 'Barkod aranıyor…',
-  ocr: 'Künye sayfası okunuyor (OCR)…',
-  lookup: 'Kitap bilgileri getiriliyor…',
+  ocr: 'Kapak okunuyor… (ilk kullanımda dil verisi indirilir)',
+  lookup: 'Kitap bilgileri aranıyor…',
 };
 
 interface UploadModalProps {
@@ -53,13 +50,13 @@ interface UploadModalProps {
   book: Book | null; // null → yeni kitap
   existingCoverSrc: string;
   genres: readonly string[];
-  ocrEnabled: boolean;
-  apiKey: string;
+  library: readonly Book[];
+  remote: RemoteSearch | null;
   onClose: () => void;
   onSubmit: (input: BookInput, bookId: number | null) => Promise<void>;
 }
 
-export function UploadModal({ open, book, existingCoverSrc, genres, ocrEnabled, apiKey, onClose, onSubmit }: UploadModalProps) {
+export function UploadModal({ open, book, existingCoverSrc, genres, library, remote, onClose, onSubmit }: UploadModalProps) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [coverIndex, setCoverIndex] = useState(0);
@@ -88,7 +85,6 @@ export function UploadModal({ open, book, existingCoverSrc, genres, ocrEnabled, 
             pageCount: book.pageCount ? String(book.pageCount) : '',
             genre: book.genre,
             publicationYear: book.publicationYear ? String(book.publicationYear) : '',
-            isbn: book.isbn ?? '',
             status: book.status,
             notes: book.notes,
           }
@@ -143,7 +139,6 @@ export function UploadModal({ open, book, existingCoverSrc, genres, ocrEnabled, 
       pageCount: details.pageCount ? String(details.pageCount) : current.pageCount,
       genre: details.genre || current.genre,
       publicationYear: details.publicationYear ? String(details.publicationYear) : current.publicationYear,
-      isbn: details.isbn ?? current.isbn,
     }));
     if (details.coverUrl) {
       setOnlineCover(details.coverUrl);
@@ -157,43 +152,19 @@ export function UploadModal({ open, book, existingCoverSrc, genres, ocrEnabled, 
     setMessage(null);
     setResults([]);
     try {
+      // Kapak olarak seçilen fotoğraf (★) ön kapaktır — önce o okunur
+      const ordered = [...photos.slice(coverIndex, coverIndex + 1), ...photos.filter((_, index) => index !== coverIndex)];
       const result = await analyzeBookPhotos(
-        photos.map((photo) => photo.file),
-        { ocrEnabled, apiKey, onStep: setStep },
+        ordered.map((photo) => photo.file),
+        { library, remote, onStep: setStep },
       );
-      if (result.isbn) set('isbn', result.isbn);
-      if (result.details) {
-        applyDetails(result.details);
-        // Barkod çoğunlukla arka kapaktadır; çevrimiçi ön kapak varsa onu öner
-        if (result.details.coverUrl) setCoverMode('online');
-      }
-      setMessage({ tone: result.details ? 'success' : 'info', text: result.message });
+      if (result.details) applyDetails(result.details);
+      // Kendi ön kapak fotoğrafınız çevrimiçi küçük resimden daha net — kapak seçimi değişmez
+      if (photos.length > 0) setCoverMode('photo');
+      setResults(result.candidates);
+      setMessage({ tone: result.matched ? 'success' : 'info', text: result.message });
     } catch (err) {
       setMessage({ tone: 'error', text: `Analiz başarısız: ${errorMessage(err)}` });
-    } finally {
-      setStep(null);
-    }
-  };
-
-  const fetchByIsbn = async () => {
-    const isbn = normalizeIsbn(form.isbn);
-    if (!isbn) {
-      setMessage({ tone: 'error', text: 'Geçerli bir ISBN girin (10 veya 13 hane).' });
-      return;
-    }
-    setStep('lookup');
-    setMessage(null);
-    try {
-      const details = await lookupByIsbn(isbn, apiKey);
-      set('isbn', isbn);
-      if (details) {
-        applyDetails(details);
-        setMessage({ tone: 'success', text: `Bilgiler ${details.source ?? 'kaynaktan'} getirildi. Lütfen kontrol edin.` });
-      } else {
-        setMessage({ tone: 'info', text: 'Bu ISBN için kayıt bulunamadı. Başlık/yazar ile arayabilir veya elle doldurabilirsiniz.' });
-      }
-    } catch (err) {
-      setMessage({ tone: 'error', text: errorMessage(err) });
     } finally {
       setStep(null);
     }
@@ -207,7 +178,7 @@ export function UploadModal({ open, book, existingCoverSrc, genres, ocrEnabled, 
     setSearching(true);
     setMessage(null);
     try {
-      const found = await searchBooks(form.title, form.author, apiKey);
+      const found = await searchBooks(form.title, form.author, remote);
       setResults(found);
       if (found.length === 0) setMessage({ tone: 'info', text: 'Sonuç bulunamadı.' });
     } catch (err) {
@@ -235,7 +206,6 @@ export function UploadModal({ open, book, existingCoverSrc, genres, ocrEnabled, 
         status: form.status,
         notes: form.notes,
         publicationYear: form.publicationYear ? Number.parseInt(form.publicationYear, 10) : null,
-        isbn: normalizeIsbn(form.isbn) ?? (form.isbn.trim() || null),
       };
       const coverPhoto = photos[coverIndex];
       if (coverMode === 'photo' && coverPhoto) input.image = await compressImage(coverPhoto.file);
@@ -260,7 +230,7 @@ export function UploadModal({ open, book, existingCoverSrc, genres, ocrEnabled, 
       locked={busy}
       size="lg"
       title={book ? 'Kitabı Düzenle' : 'Yeni Kitap Ekle'}
-      subtitle={book ? book.title : 'Ön/arka kapak ve künye fotoğraflarını yükleyin; bilgiler otomatik dolsun'}
+      subtitle={book ? book.title : 'Ön kapak fotoğrafını yükleyin; bilgiler kapaktan okunsun'}
       footer={
         <>
           {error && <p className="mr-auto text-sm text-danger">{error}</p>}
@@ -362,7 +332,7 @@ export function UploadModal({ open, book, existingCoverSrc, genres, ocrEnabled, 
           )}
 
           <p className="text-xs leading-relaxed text-muted">
-            İpucu: Arka kapaktaki <strong className="font-medium text-ink">barkod</strong> en hızlı ve doğru sonucu verir. Barkod yoksa künye sayfasını ekleyin.
+            İpucu: Ön kapağı <strong className="font-medium text-ink">düz, net ve tam kadraj</strong> çekin. Yazar kitaplığınızda varsa adı otomatik tanınır.
           </p>
         </div>
 
@@ -385,20 +355,6 @@ export function UploadModal({ open, book, existingCoverSrc, genres, ocrEnabled, 
               <span>{step ? STEP_LABEL[step] : message?.text}</span>
             </div>
           )}
-
-          <div>
-            <span className="label">ISBN</span>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Barcode size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-                <input className="field pl-9 font-mono" inputMode="numeric" placeholder="978…" value={form.isbn} onChange={(event) => set('isbn', event.target.value)} />
-              </div>
-              <button type="button" className="btn-secondary shrink-0" onClick={fetchByIsbn} disabled={busy || !form.isbn.trim()}>
-                <Globe size={15} />
-                Getir
-              </button>
-            </div>
-          </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block sm:col-span-2">
@@ -425,7 +381,7 @@ export function UploadModal({ open, book, existingCoverSrc, genres, ocrEnabled, 
           {results.length > 0 && (
             <ul className="scrollbar-thin -mt-2 max-h-64 space-y-1 overflow-y-auto rounded-lg border border-line bg-white p-1.5">
               {results.map((result, index) => (
-                <li key={`${result.isbn ?? result.title}-${index}`}>
+                <li key={`${result.title}-${result.author}-${index}`}>
                   <button type="button" onClick={() => applyDetails(result)} className="flex w-full items-center gap-3 rounded-md p-1.5 text-left transition hover:bg-soft">
                     <div className="h-14 w-10 shrink-0 overflow-hidden rounded-sm bg-soft">
                       <BookCover book={result} src={result.coverUrl ?? ''} />
