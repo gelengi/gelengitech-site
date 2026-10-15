@@ -309,14 +309,27 @@ async function requireAuth(request: Request, env: Env): Promise<void> {
 async function googleBooksLookup(env: Env, rawQuery: string): Promise<{ items: unknown[] }> {
   const query = rawQuery.trim().slice(0, 200);
   if (!query) throw new HttpError(400, 'Arama metni gerekli');
-  const params = new URLSearchParams({ q: query, maxResults: '10', printType: 'books' });
+  // country: Worker IP'sinden konum çıkarılamayabiliyor; Türkiye sabit verilir
+  const params = new URLSearchParams({ q: query, maxResults: '10', printType: 'books', country: 'TR' });
   if (env.GOOGLE_BOOKS_API_KEY) params.set('key', env.GOOGLE_BOOKS_API_KEY);
-  let response: Response;
-  try {
-    response = await fetch(`https://www.googleapis.com/books/v1/volumes?${params.toString()}`, { cf: { cacheTtlByStatus: { '200-299': 86400, '300-599': 0 }, cacheEverything: true } });
-  } catch {
-    throw new HttpError(502, 'Google Books’a ulaşılamadı');
+  const url = `https://www.googleapis.com/books/v1/volumes?${params.toString()}`;
+  const init: RequestInit = {
+    headers: { 'User-Agent': 'Kitapligim/1.0 (+https://gelengitech.com/bookstore)', Accept: 'application/json' },
+    cf: { cacheTtlByStatus: { '200-299': 86400, '300-599': 0 }, cacheEverything: true },
+  };
+  let response: Response | null = null;
+  // Google zaman zaman geçici 503 döndürüyor — kısa aralıklarla iki kez daha dene
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 400 * attempt));
+    try {
+      response = await fetch(url, init);
+    } catch {
+      response = null;
+      continue;
+    }
+    if (response.status !== 503 && response.status !== 500) break;
   }
+  if (!response) throw new HttpError(502, 'Google Books’a ulaşılamadı');
   if (response.status === 429) throw new HttpError(503, 'Google Books kotası dolu — GOOGLE_BOOKS_API_KEY tanımlayın');
   if (!response.ok) {
     // Google'ın kendi açıklamasını ilet (ör. "API key not valid", "API has not been used in project") — anahtar değeri içermez
