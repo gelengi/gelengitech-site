@@ -257,7 +257,48 @@ export async function searchBooks(title: string, author: string, apiKey = ''): P
   if (title.trim()) parts.push(`intitle:${title.trim()}`);
   if (author.trim()) parts.push(`inauthor:${author.trim()}`);
   if (parts.length === 0) return [];
-  return googleBooks(parts.join(' '), apiKey, 6);
+  try {
+    const results = await googleBooks(parts.join(' '), apiKey, 6);
+    if (results.length > 0) return results;
+  } catch {
+    // Google kotası dolmuş olabilir (anahtarsız ortak kota) — Open Library'ye düş
+  }
+  return openLibrarySearch(title, author);
+}
+
+interface OpenLibrarySearchDoc {
+  title?: string;
+  subtitle?: string;
+  author_name?: string[];
+  publisher?: string[];
+  number_of_pages_median?: number;
+  first_publish_year?: number;
+  isbn?: string[];
+  subject?: string[];
+  cover_i?: number;
+}
+
+async function openLibrarySearch(title: string, author: string): Promise<BookDetails[]> {
+  const params = new URLSearchParams({ limit: '6', fields: 'title,subtitle,author_name,publisher,number_of_pages_median,first_publish_year,isbn,subject,cover_i' });
+  if (title.trim()) params.set('title', title.trim());
+  if (author.trim()) params.set('author', author.trim());
+  const response = await fetch(`https://openlibrary.org/search.json?${params.toString()}`);
+  if (!response.ok) throw new Error(`Open Library yanıt vermedi (${response.status})`);
+  const data = (await response.json()) as { docs?: OpenLibrarySearchDoc[] };
+  return (data.docs ?? []).map((doc) => {
+    const isbn = (doc.isbn ?? []).map((value) => normalizeIsbn(value)).find((value): value is string => value !== null);
+    return {
+      title: [doc.title, doc.subtitle].filter(Boolean).join(': ').trim(),
+      author: (doc.author_name ?? []).join(', '),
+      publisher: doc.publisher?.[0] ?? '',
+      pageCount: doc.number_of_pages_median ?? 0,
+      genre: mapGenre(doc.subject ?? []),
+      publicationYear: doc.first_publish_year,
+      isbn,
+      coverUrl: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : undefined,
+      source: 'Open Library' as const,
+    };
+  });
 }
 
 // ------------------------------------------------------------------ Ana akış
