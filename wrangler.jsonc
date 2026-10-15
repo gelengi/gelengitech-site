@@ -2,9 +2,33 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "gelengitech-site",
   "compatibility_date": "2026-10-10",
+  // Statik site + /bookstore/api/* için küçük bir Worker (bookstore/worker/index.ts)
+  "main": "bookstore/worker/index.ts",
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "404-page",
-    "html_handling": "auto-trailing-slash"
+    "html_handling": "auto-trailing-slash",
+    // Yalnızca API istekleri Worker'a uğrar; diğer tüm sayfalar doğrudan statik sunulur
+    "run_worker_first": ["/bookstore/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "gelengi-bookstore",
+      "database_id": "2f0664fd-86bd-4328-9170-3db015e7a319",
+      "migrations_dir": "bookstore/migrations"
+    }
+  ],
+  // PR önizlemeleri (Worker Previews) gerçek kitaplığa dokunmasın diye ayrı, boş bir veritabanı kullanır
+  "previews": {
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "gelengi-bookstore-preview",
+        "database_id": "3fd15d33-1231-4a00-b723-60a835e033df",
+        "migrations_dir": "bookstore/migrations"
+      }
+    ]
   }
 }

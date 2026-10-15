@@ -1,0 +1,109 @@
+# Kitaplığım — gelengitech.com/bookstore
+
+Kişisel kütüphane kataloğu. Kitap fotoğrafından (arka kapak barkodu veya künye sayfası) bilgileri otomatik çıkarır. Grid, 3B ahşap raf (4 tema) ve Excel'e aktarılabilen özet liste görünümleri vardır. Ziyaretçiler kitaplığı görüntüler; ekleme ve düzenleme yalnızca sahip girişiyle yapılır.
+
+## Mimari
+
+```
+gelengitech.com (Cloudflare Worker, wrangler.jsonc)
+├── /                     Astro statik site (değişmedi)
+├── /bookstore/           React 19 + Vite + Tailwind v4 SPA  → dist/bookstore
+└── /bookstore/api/*      Worker API (bookstore/worker/index.ts) → Cloudflare D1 (SQLite)
+```
+
+- **Veritabanı:** Cloudflare D1 (`gelengi-bookstore`). Kitaplar `books` tablosunda, kapak görselleri `covers` tablosunda (BLOB) tutulur. Ek hizmet veya ücretli plan gerekmez; D1 ücretsiz katmanı kişisel kütüphane için fazlasıyla yeterli.
+- **Kitap tanıma (yapay zekâ yok):**
+  1. Barkod → ISBN (tarayıcının `BarcodeDetector`'ı, yoksa ZXing)
+  2. Barkod yoksa künye sayfasında OCR (tesseract.js, Türkçe+İngilizce, isteğe bağlı)
+  3. ISBN → Google Books, eksik alanlar Open Library'den tamamlanır
+  4. Başlık/yazar ile çevrimiçi arama ve elle düzenleme her zaman mümkün
+- **Yetki:** Okuma uçları herkese açık. Yazma uçları `Authorization: Bearer <token>` ister. Token, `ADMIN_PASSWORD` ile giriş yapınca 30 gün geçerli HMAC imzalı olarak verilir.
+- **Görseller:** İstemcide en fazla 800×1200 px ve JPEG 0.7 kalitesine sıkıştırılır (~100–250 KB).
+
+## İlk kurulum (tek seferlik, Cloudflare)
+
+Repo kökünde (`gelengitech-site/`) çalıştırın:
+
+```bash
+npm install
+npx wrangler login
+
+# 1) D1 veritabanını oluştur → çıktıdaki database_id'yi wrangler.jsonc içine yaz
+npx wrangler d1 create gelengi-bookstore
+
+# 2) Tabloları oluştur
+npx wrangler d1 migrations apply gelengi-bookstore --remote
+
+# 3) Sahip şifresi ve oturum imza anahtarı (secret olarak, repoya girmez)
+npx wrangler secret put ADMIN_PASSWORD
+openssl rand -hex 32 | npx wrangler secret put SESSION_SECRET
+
+# 4) Yayınla (Cloudflare Git entegrasyonu açıksa main'e merge yeterli)
+npm run deploy
+```
+
+> ⚠️ `database_id` gerçek değerle değiştirilmeden `main`'e merge edilirse deploy başarısız olur, ancak mevcut site yayında kalır.
+
+Cloudflare panelindeki derleme ayarları: **Build command** `npm run build`, **Deploy command** `npx wrangler deploy`. Kök `build` betiği artık Astro'dan sonra bookstore'u da derliyor.
+
+## Yerel geliştirme
+
+```bash
+# Repo kökünde, bir kez:
+printf 'ADMIN_PASSWORD=test\nSESSION_SECRET=yerel-gizli-anahtar\n' > .dev.vars
+npx wrangler d1 migrations apply gelengi-bookstore --local
+
+# Terminal 1 — API + yerel D1 (SQLite, internet gerektirmez)
+cd bookstore && npm run dev:api
+
+# Terminal 2 — arayüz (http://localhost:5173/bookstore/)
+cd bookstore && npm run dev
+```
+
+`npm run build` (bookstore içinde) önce üç TypeScript projesinin (app, worker, vite config) tip kontrolünü yapar, sonra `../dist/bookstore`'a derler.
+
+## API (mobil uygulama için de aynı sözleşme)
+
+Kök: `https://gelengitech.com/bookstore/api`. Tipler `src/types.ts` içinde. CORS açık, cookie kullanılmaz.
+
+| Yöntem | Yol | Yetki | Açıklama |
+|---|---|---|---|
+| GET | `/health` | – | Sağlık kontrolü |
+| POST | `/auth/login` `{password}` | – | `{token, expiresAt}` döner |
+| GET | `/auth/me` | (token) | `{authenticated}` |
+| GET | `/books` | – | Tüm kitaplar (`Book[]`) |
+| GET | `/books/:id` | – | Tek kitap |
+| GET | `/books/:id/cover?v=…` | – | Kapak görseli (uzun süreli önbellek) |
+| POST | `/books` `BookInput` | ✓ | Kitap ekle. `image`: data URL, `coverUrl`: Google Books/Open Library kapağı |
+| PUT | `/books/:id` `Partial<BookInput>` | ✓ | Kısmi güncelleme. `image: null` kapağı kaldırır |
+| PATCH | `/books/status` `{ids, status}` | ✓ | Toplu durum güncelleme |
+| DELETE | `/books/:id` | ✓ | Sil |
+
+## Dosya yapısı
+
+```
+bookstore/
+├── worker/index.ts          Cloudflare Worker: REST API + statik dosyalara geçiş
+├── migrations/0001_init.sql D1 şeması
+├── src/
+│   ├── types.ts             Book, BookDetails, BookInput (web + worker + mobil)
+│   ├── App.tsx              Sayfa düzeni, filtre motoru bağlantısı, toplu işlemler
+│   ├── services/
+│   │   ├── config.ts        localStorage ayarları (oturum, OCR, Google Books anahtarı)
+│   │   ├── db.ts            API istemcisi
+│   │   ├── bookLookup.ts    Barkod/OCR → ISBN → Google Books/Open Library
+│   │   └── image.ts         Canvas sıkıştırma
+│   ├── lib/                 filtreler, tür eşlemesi, Excel/ZIP dışa aktarma
+│   └── components/          Header, Sidebar, BookCard, LibraryView, ListView,
+│                            UploadModal, BulkUploadModal, SettingsModal, BookDetailModal, BulkBar
+└── public/manifest.webmanifest  Ana ekrana eklenebilir (PWA temeli)
+```
+
+## Notlar
+
+- **Google Books kotası:** Anahtarsız çalışır. Çok sayıda toplu eklemede Ayarlar'dan ücretsiz bir Google Books API anahtarı girilebilir.
+- **Türkçe yayınlar:** Google Books ve Open Library kapsamı her kitapta tam değildir. Özellikle **tür** alanı boş gelebilir, kaydetmeden önce kontrol edin.
+- **OCR:** İlk kullanımda tarayıcı ~15 MB dil verisini (jsDelivr CDN) indirir. Ayarlar'dan kapatılabilir.
+- **Yedek:** "Fotoğrafları Yedekle" tüm kapakları ve `books.json` dosyasını `bookstore_photos_TARIH.zip` olarak indirir.
+- **Mobil:** Arayüz responsive ve PWA manifesti var. Yerel mobil uygulama aynı API'yi kullanabilir.
+- **Pages mi Workers mı?** API, `wrangler.jsonc` içindeki Worker (`main`) üzerinden çalışır. Bu, `npm run deploy` (wrangler deploy) veya Cloudflare **Workers Builds** ile yayında geçerlidir. Site bir **Pages** projesi olarak bağlıysa Worker kodu çalışmaz; API'nin `functions/` klasörüne taşınması gerekir.

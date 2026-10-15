@@ -4,10 +4,11 @@
     "astro": "^7.3.8"
   },
   "scripts": {
-    "build": "astro build",
+    "build": "astro build && npm run build:bookstore",
     "dev": "astro dev",
     "preview": "astro preview",
-    "deploy": "astro build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "build:bookstore": "npm --prefix bookstore ci && npm --prefix bookstore run build"
   },
   "devDependencies": {
     "wrangler": "^4.149.0"
