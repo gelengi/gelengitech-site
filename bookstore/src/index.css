@@ -70,3 +70,19 @@
   scrollbar-width: thin;
   scrollbar-color: #d9d2cb transparent;
 }
+
+/* iOS: 16px'ten küçük yazılı alana odaklanınca sayfa otomatik yakınlaşıyor ve geri dönmüyor.
+   Dokunmatik cihazlarda form alanları en az 16px; masaüstü görünüm değişmez. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Taşan bir öğe sayfayı yatayda kaydırmasın (clip, sticky başlığı bozmaz) */
+html,
+body {
+  overflow-x: clip;
+}
