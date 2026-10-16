@@ -110,3 +110,12 @@ bookstore/
 - **Yedek:** "Fotoğrafları Yedekle" tüm kapakları ve `books.json` dosyasını `bookstore_photos_TARIH.zip` olarak indirir.
 - **Mobil:** Arayüz responsive ve PWA manifesti var. Yerel mobil uygulama aynı API'yi kullanabilir.
 - **Pages mi Workers mı?** API, `wrangler.jsonc` içindeki Worker (`main`) üzerinden çalışır. Bu, `npm run deploy` (wrangler deploy) veya Cloudflare **Workers Builds** ile yayında geçerlidir. Site bir **Pages** projesi olarak bağlıysa Worker kodu çalışmaz; API'nin `functions/` klasörüne taşınması gerekir.
+
+## Mobil uygulama (iOS, Capacitor)
+
+Aynı React kodu Capacitor ile iOS uygulamasına paketlenir; uygulama `https://gelengitech.com/bookstore/api` adresini kullanır (`.env.mobile`).
+
+- Paket kimliği: `com.gelengitech.kitapligim`, ad: Kitaplığım (`capacitor.config.ts`)
+- Xcode projesi: `ios/App` (Swift Package Manager; CocoaPods gerekmez)
+- İkon ve açılış ekranı kaynakları: `assets/` → `npx @capacitor/assets generate --ios`
+- Mac'te: `npm install` ardından `npm run ios` (mobil derleme + `cap sync ios` + Xcode'u açar). Web kodu değişince `npm run ios:sync` ve Xcode'da ▶.

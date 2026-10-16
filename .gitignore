@@ -4,3 +4,4 @@ dist-preview
 .astro
 .wrangler
 .dev.vars
+dist-mobile

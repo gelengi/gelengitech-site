@@ -49,7 +49,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 backdrop-blur-[2px] sm:items-center sm:p-4"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-[2px] sm:items-center sm:p-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -80,7 +80,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
               </div>
             )}
             <div className="scrollbar-thin flex-1 overflow-y-auto">{children}</div>
-            {footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-white/60 px-5 py-3 sm:px-6">{footer}</div>}
+            {footer && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-white/60 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-3">{footer}</div>}
           </motion.div>
         </motion.div>
       )}
@@ -171,7 +171,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 top-3 z-[70] flex flex-col items-center gap-2 px-3" aria-live="polite">
+      <div className="pointer-events-none fixed inset-x-0 top-[max(0.75rem,env(safe-area-inset-top))] z-[70] flex flex-col items-center gap-2 px-3" aria-live="polite">
         <AnimatePresence>
           {items.map((item) => (
             <motion.div

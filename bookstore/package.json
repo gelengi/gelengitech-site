@@ -10,9 +10,14 @@
     "db:migrate:remote": "cd .. && wrangler d1 migrations apply gelengi-bookstore --remote",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tsconfig.node.json",
     "build": "npm run typecheck && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:mobile": "npm run typecheck && vite build --mode mobile",
+    "ios": "npm run build:mobile && cap sync ios && cap open ios",
+    "ios:sync": "npm run build:mobile && cap sync ios"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
     "jszip": "^3.10.2",
     "lucide-react": "^1.57.0",
     "motion": "^14.2.0",
@@ -22,6 +27,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@cloudflare/workers-types": "^5.20261015.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^26.6.5",
