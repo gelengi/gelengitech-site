@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Kitaplığım uygulama ikonu: koyu zemin, rafta üç kitap; sonuncusu komşusuna yaslanmış -->
+  <rect width="1024" height="1024" fill="#1a1a1a"/>
+  <g>
+    <!-- 1: krem, en uzun -->
+    <rect x="262" y="250" width="138" height="520" rx="10" fill="#f5f2ee"/>
+    <rect x="262" y="318" width="138" height="14" fill="#d9d1c7"/>
+    <rect x="262" y="690" width="138" height="14" fill="#d9d1c7"/>
+    <!-- 2: sıcak gri-kahve -->
+    <rect x="414" y="330" width="116" height="440" rx="10" fill="#8b7e74"/>
+    <rect x="414" y="392" width="116" height="12" fill="#6f645b"/>
+    <rect x="414" y="406" width="116" height="6" fill="#6f645b"/>
+    <!-- 3: hardal, sola yaslanmış: alt-sol köşesi rafta, üst kenarı 2. kitabın omzunda -->
+    <g transform="rotate(-12 624 770)">
+      <rect x="624" y="300" width="126" height="470" rx="10" fill="#b07d2b"/>
+      <rect x="624" y="370" width="126" height="12" fill="#8f6420"/>
+      <rect x="624" y="690" width="126" height="12" fill="#8f6420"/>
+    </g>
+  </g>
+  <!-- raf -->
+  <rect x="212" y="770" width="600" height="22" rx="11" fill="#f5f2ee"/>
+</svg>
