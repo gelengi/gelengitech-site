@@ -44,8 +44,17 @@ export function BookDetailModal({ book, coverSrc, canEdit, onClose, onEdit, onDe
               <Item label="Tür" value={book.genre} />
               <Item label="Sayfa" value={book.pageCount ? String(book.pageCount) : ''} />
               <Item label="Basım Yılı" value={book.publicationYear ? String(book.publicationYear) : ''} />
+              <Item label="Ne Zaman Aldım" value={book.purchaseDate ? formatDate(book.purchaseDate) : ''} />
+              <Item label="Nereden Aldım" value={book.purchasePlace} />
               <Item label="Eklenme" value={new Date(book.createdAt).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })} />
             </dl>
+
+            {book.readingNote && (
+              <section className="mt-5 rounded-lg border border-line bg-soft/60 px-4 py-3">
+                <h3 className="text-[10px] font-medium uppercase tracking-[0.1em] text-muted">Okuduktan Sonra Notum</h3>
+                <p className="mt-1.5 whitespace-pre-wrap text-[15px] leading-relaxed">{book.readingNote}</p>
+              </section>
+            )}
 
             {book.notes && (
               <blockquote className="mt-5 whitespace-pre-wrap border-l-2 border-accent/60 pl-4 font-serif text-[15px] italic leading-relaxed text-ink/85">{book.notes}</blockquote>
@@ -68,6 +77,13 @@ export function BookDetailModal({ book, coverSrc, canEdit, onClose, onEdit, onDe
       )}
     </Modal>
   );
+}
+
+/** "2026-10-16" → "16 Ekim 2026" (saat dilimi kaymasın diye yerel tarih olarak kurulur) */
+function formatDate(value: string): string {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return value;
+  return new Date(year, month - 1, day).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function Item({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {

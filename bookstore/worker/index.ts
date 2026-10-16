@@ -45,6 +45,9 @@ interface BookRow {
   notes: string;
   publication_year: number | null;
   isbn: string | null;
+  purchase_date: string | null;
+  purchase_place: string | null;
+  reading_note: string | null;
   created_at: string;
   updated_at: string;
   cover_updated_at: string | null;
@@ -96,12 +99,48 @@ function rowToBook(row: BookRow): Book {
     notes: row.notes,
     publicationYear: row.publication_year ?? undefined,
     isbn: row.isbn ?? undefined,
+    purchaseDate: row.purchase_date ?? undefined,
+    purchasePlace: row.purchase_place ?? '',
+    readingNote: row.reading_note ?? '',
     imageUrl: row.cover_updated_at
       ? `${API_PREFIX}/books/${row.id}/cover?v=${encodeURIComponent(row.cover_updated_at)}`
       : '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+// ---------------------------------------------------------------- şema güncellemesi
+// Sonradan eklenen kolonlar: Worker ilk istekte eksik olanları ekler (D1 konsolunda elle migration gerekmez,
+// production ve preview veritabanları kendiliğinden güncellenir).
+const ADDED_COLUMNS: ReadonlyArray<[name: string, definition: string]> = [
+  ['purchase_date', 'TEXT'],
+  ['purchase_place', "TEXT NOT NULL DEFAULT ''"],
+  ['reading_note', "TEXT NOT NULL DEFAULT ''"],
+];
+let schemaReady: Promise<void> | null = null;
+
+function ensureSchema(env: Env): Promise<void> {
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      const { results } = await env.DB.prepare('PRAGMA table_info(books)').all<{ name: string }>();
+      const existing = new Set(results.map((column) => column.name));
+      const missing = ADDED_COLUMNS.filter(([name]) => !existing.has(name));
+      if (missing.length === 0) return;
+      for (const [name, definition] of missing) {
+        try {
+          await env.DB.prepare(`ALTER TABLE books ADD COLUMN ${name} ${definition}`).run();
+        } catch (error) {
+          // Aynı anda başka bir istek eklemiş olabilir
+          if (!String(error).includes('duplicate column')) throw error;
+        }
+      }
+    })();
+    schemaReady.catch(() => {
+      schemaReady = null;
+    });
+  }
+  return schemaReady;
 }
 
 const SELECT_BOOKS = `
@@ -161,6 +200,19 @@ interface CleanBook {
   notes: string;
   publicationYear: number | null;
   isbn: string | null;
+  purchaseDate: string | null;
+  purchasePlace: string;
+  readingNote: string;
+}
+
+/** YYYY-MM-DD; boş → null. Gelecek tarih kabul edilmez. */
+function cleanDate(value: unknown, field: string): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new HttpError(400, `${field} YYYY-AA-GG biçiminde olmalıdır`);
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) throw new HttpError(400, `${field} geçerli bir tarih değil`);
+  if (parsed.getTime() > Date.now() + 36 * 3600 * 1000) throw new HttpError(400, `${field} gelecekte olamaz`);
+  return value;
 }
 
 function validateBook(input: Partial<BookInput>): CleanBook {
@@ -176,6 +228,9 @@ function validateBook(input: Partial<BookInput>): CleanBook {
     notes: str(input.notes, 'Notlar', 20000),
     publicationYear: int(input.publicationYear, 'Basım yılı', 0, new Date().getFullYear() + 1),
     isbn: cleanIsbn(input.isbn),
+    purchaseDate: cleanDate(input.purchaseDate, 'Alış tarihi'),
+    purchasePlace: str(input.purchasePlace, 'Alındığı yer', 200),
+    readingNote: str(input.readingNote, 'Okuma notu', 20000),
   };
 }
 
@@ -382,6 +437,7 @@ async function handleApi(request: Request, env: Env, path: string): Promise<Resp
   }
 
   if (segments[0] !== 'books') throw new HttpError(404, 'Bulunamadı');
+  await ensureSchema(env);
 
   // /books
   if (segments.length === 1) {
@@ -396,10 +452,14 @@ async function handleApi(request: Request, env: Env, path: string): Promise<Resp
       const cover = await resolveCover(input);
       const ts = nowIso();
       const inserted = await env.DB.prepare(
-        `INSERT INTO books (title, author, publisher, page_count, genre, status, notes, publication_year, isbn, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        `INSERT INTO books (title, author, publisher, page_count, genre, status, notes, publication_year, isbn,
+           purchase_date, purchase_place, reading_note, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
       )
-        .bind(book.title, book.author, book.publisher, book.pageCount, book.genre, book.status, book.notes, book.publicationYear, book.isbn, ts, ts)
+        .bind(
+          book.title, book.author, book.publisher, book.pageCount, book.genre, book.status, book.notes, book.publicationYear, book.isbn,
+          book.purchaseDate, book.purchasePlace, book.readingNote, ts, ts,
+        )
         .first<{ id: number }>();
       if (!inserted) throw new HttpError(500, 'Kitap kaydedilemedi');
       if (cover) await coverStatement(env, inserted.id, cover).run();
@@ -455,6 +515,9 @@ async function handleApi(request: Request, env: Env, path: string): Promise<Resp
         notes: existing.notes,
         publicationYear: existing.publicationYear ?? null,
         isbn: existing.isbn ?? null,
+        purchaseDate: existing.purchaseDate ?? null,
+        purchasePlace: existing.purchasePlace,
+        readingNote: existing.readingNote,
         ...input,
       };
       const book = validateBook(merged);
@@ -462,8 +525,11 @@ async function handleApi(request: Request, env: Env, path: string): Promise<Resp
       const statements: D1PreparedStatement[] = [
         env.DB.prepare(
           `UPDATE books SET title = ?, author = ?, publisher = ?, page_count = ?, genre = ?, status = ?, notes = ?,
-           publication_year = ?, isbn = ?, updated_at = ? WHERE id = ?`,
-        ).bind(book.title, book.author, book.publisher, book.pageCount, book.genre, book.status, book.notes, book.publicationYear, book.isbn, nowIso(), id),
+           publication_year = ?, isbn = ?, purchase_date = ?, purchase_place = ?, reading_note = ?, updated_at = ? WHERE id = ?`,
+        ).bind(
+          book.title, book.author, book.publisher, book.pageCount, book.genre, book.status, book.notes, book.publicationYear, book.isbn,
+          book.purchaseDate, book.purchasePlace, book.readingNote, nowIso(), id,
+        ),
       ];
       if (cover !== undefined) statements.push(coverStatement(env, id, cover));
       await env.DB.batch(statements);

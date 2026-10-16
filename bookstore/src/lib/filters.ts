@@ -65,7 +65,7 @@ export function applyFilters(books: readonly Book[], filters: Filters, search: s
     if (yearMin !== null && (book.publicationYear === undefined || book.publicationYear < yearMin)) return false;
     if (yearMax !== null && (book.publicationYear === undefined || book.publicationYear > yearMax)) return false;
     if (query) {
-      const haystack = normalizeText(`${book.title} ${book.author} ${book.publisher} ${book.genre}`);
+      const haystack = normalizeText(`${book.title} ${book.author} ${book.publisher} ${book.genre} ${book.purchasePlace}`);
       if (!haystack.includes(query)) return false;
     }
     return true;

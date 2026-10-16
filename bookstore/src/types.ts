@@ -16,6 +16,9 @@ export interface Book {
   notes: string; // Kişisel notlar / alıntılar
   publicationYear?: number; // Basım yılı
   isbn?: string; // ISBN-13 (varsa)
+  purchaseDate?: string; // Alış tarihi (YYYY-AA-GG)
+  purchasePlace: string; // Nereden alındı (kitapçı, site, hediye…)
+  readingNote: string; // Okuduktan sonra kısa not / değerlendirme
   createdAt: string; // ISO tarih
   updatedAt: string; // ISO tarih
 }
@@ -44,6 +47,9 @@ export interface BookInput {
   notes: string;
   publicationYear?: number | null;
   isbn?: string | null;
+  purchaseDate?: string | null;
+  purchasePlace?: string;
+  readingNote?: string;
   /** data:image/jpeg;base64,... — yeni kapak. null => kapağı kaldır, undefined => değiştirme */
   image?: string | null;
   /** Çevrimiçi kapak URL'i; sunucu indirip saklar (yalnızca izinli alan adları) */

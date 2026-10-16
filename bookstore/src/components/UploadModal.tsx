@@ -27,6 +27,9 @@ interface FormState {
   publicationYear: string;
   status: ReadingStatus;
   notes: string;
+  purchaseDate: string;
+  purchasePlace: string;
+  readingNote: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -38,6 +41,9 @@ const EMPTY_FORM: FormState = {
   publicationYear: '',
   status: 'Okunmadı',
   notes: '',
+  purchaseDate: '',
+  purchasePlace: '',
+  readingNote: '',
 };
 
 const STEP_LABEL: Record<AnalysisStep, string> = {
@@ -87,6 +93,9 @@ export function UploadModal({ open, book, existingCoverSrc, genres, library, rem
             publicationYear: book.publicationYear ? String(book.publicationYear) : '',
             status: book.status,
             notes: book.notes,
+            purchaseDate: book.purchaseDate ?? '',
+            purchasePlace: book.purchasePlace,
+            readingNote: book.readingNote,
           }
         : EMPTY_FORM,
     );
@@ -205,6 +214,9 @@ export function UploadModal({ open, book, existingCoverSrc, genres, library, rem
         genre: form.genre.trim(),
         status: form.status,
         notes: form.notes,
+        purchaseDate: form.purchaseDate || null,
+        purchasePlace: form.purchasePlace.trim(),
+        readingNote: form.readingNote.trim(),
         publicationYear: form.publicationYear ? Number.parseInt(form.publicationYear, 10) : null,
       };
       const coverPhoto = photos[coverIndex];
@@ -220,6 +232,9 @@ export function UploadModal({ open, book, existingCoverSrc, genres, library, rem
   };
 
   const genreOptions = [...new Set([...genres, ...DEFAULT_GENRES])];
+  // Daha önce girilen yerler öneri olarak gelir (aynı kitapçıyı tekrar yazmamak için)
+  const placeOptions = [...new Set(library.map((item) => item.purchasePlace).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
+  const today = new Date().toISOString().slice(0, 10);
   const previewSrc =
     coverMode === 'photo' ? (photos[coverIndex]?.preview ?? '') : coverMode === 'online' ? onlineCover : coverMode === 'existing' ? existingCoverSrc : '';
 
@@ -431,6 +446,40 @@ export function UploadModal({ open, book, existingCoverSrc, genres, library, rem
               ))}
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="label">Ne Zaman Aldım</span>
+              <input className="field" type="date" max={today} value={form.purchaseDate} onChange={(event) => set('purchaseDate', event.target.value)} />
+            </label>
+            <label className="block">
+              <span className="label">Nereden Aldım</span>
+              <input
+                className="field"
+                list="place-options"
+                value={form.purchasePlace}
+                onChange={(event) => set('purchasePlace', event.target.value)}
+                maxLength={200}
+                placeholder="Kitapçı, site, hediye…"
+              />
+              <datalist id="place-options">
+                {placeOptions.map((place) => (
+                  <option key={place} value={place} />
+                ))}
+              </datalist>
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="label">Okuduktan Sonra Notum</span>
+            <textarea
+              className="field min-h-20 resize-y leading-relaxed"
+              value={form.readingNote}
+              onChange={(event) => set('readingNote', event.target.value)}
+              maxLength={20000}
+              placeholder={form.status === 'Okundu' ? 'Nasıldı? Kısa izlenimin, kime önerirsin…' : 'Okuyunca kısa izlenimini buraya yazabilirsin'}
+            />
+          </label>
 
           <label className="block">
             <span className="label">Notlar / Alıntılar</span>
