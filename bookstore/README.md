@@ -77,10 +77,10 @@ Kök: `https://gelengitech.com/bookstore/api`. Tipler `src/types.ts` içinde. CO
 | GET | `/books/:id/cover?v=…` | – | Kapak görseli (uzun süreli önbellek) |
 | POST | `/books` `BookInput` | ✓ | Kitap ekle. `image`: data URL, `coverUrl`: Google Books/Open Library kapağı |
 | PUT | `/books/:id` `Partial<BookInput>` | ✓ | Kısmi güncelleme. `image: null` kapağı kaldırır |
-
-Kitap alanlarına sonradan eklenenler: `purchaseDate` (YYYY-AA-GG, alış tarihi), `purchasePlace` (nereden alındı), `readingNote` (okuduktan sonra not). Bu kolonları Worker ilk istekte eksikse kendisi ekler (`ensureSchema`); D1 için ayrıca migration çalıştırmak gerekmez.
 | PATCH | `/books/status` `{ids, status}` | ✓ | Toplu durum güncelleme |
 | DELETE | `/books/:id` | ✓ | Sil |
+
+Kitap alanlarına sonradan eklenenler: `purchaseDate` (YYYY-AA-GG, alış tarihi), `purchasePlace` (nereden alındı), `readingNote` (okuduktan sonra not). Bu kolonları Worker ilk istekte eksikse kendisi ekler (`ensureSchema`); D1 için ayrıca migration çalıştırmak gerekmez.
 
 ## Dosya yapısı
 
