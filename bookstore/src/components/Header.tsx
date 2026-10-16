@@ -16,7 +16,7 @@ interface HeaderProps {
 
 export function Header({ search, onSearchChange, canEdit, backupBusy, onAdd, onBulkAdd, onBackup, onSettings }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b pt-[env(safe-area-inset-top)] border-line bg-paper/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:px-6 lg:flex-nowrap">
         <a href="/" className="group flex shrink-0 items-baseline gap-2" title="gelengitech.com">
           <span className="font-serif text-2xl font-semibold tracking-tight sm:text-[28px]">Kitaplığım</span>

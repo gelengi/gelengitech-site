@@ -153,7 +153,7 @@ export function LibraryView({ open, books, theme, onThemeChange, onClose, onOpen
 
   return (
     <motion.div
-      className="fixed inset-0 z-40 flex flex-col"
+      className="fixed inset-0 z-40 flex flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       style={{ background: t.wall }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

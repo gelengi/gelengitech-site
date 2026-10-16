@@ -9,7 +9,8 @@ export interface AppConfig {
   apiBase: string;
 }
 
-export const DEFAULT_API_BASE = `${import.meta.env.BASE_URL}api`;
+// Web: aynı alan adı (/bookstore/api). Mobil derlemede (vite --mode mobile) VITE_API_BASE ile tam adres verilir.
+export const DEFAULT_API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) || `${import.meta.env.BASE_URL}api`;
 
 const CONFIG_KEY = 'kitapligim.config.v1';
 
