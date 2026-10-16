@@ -31,6 +31,9 @@ export async function exportToExcel(books: readonly Book[]): Promise<void> {
     'Sayfa Sayısı': book.pageCount || '',
     'Basım Yılı': book.publicationYear ?? '',
     Durum: book.status,
+    'Alış Tarihi': book.purchaseDate ?? '',
+    'Nereden Alındı': book.purchasePlace,
+    'Okuma Notu': book.readingNote,
     Notlar: book.notes,
   }));
   const sheet = XLSX.utils.json_to_sheet(rows);
