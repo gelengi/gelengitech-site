@@ -8,8 +8,8 @@
 
 import type { Book, BookDetails } from '../types';
 import { mapGenre } from '../lib/genres';
-import { guessFromCover, mergeWords, scoreCandidate, fold, type CoverGuess, type OcrWord } from '../lib/coverText';
-import { fileToCanvas } from './image';
+import { guessFromCover, mergeWords, scoreCandidate, fold, tokenize, type CoverGuess, type OcrWord } from '../lib/coverText';
+import { compressImage, fileToCanvas } from './image';
 
 // ------------------------------------------------------------------ OCR (tembel yüklenir)
 
@@ -228,7 +228,21 @@ export async function searchBooks(title: string, author: string, remote: RemoteS
 
 // ------------------------------------------------------------------ Ana akış
 
-export type AnalysisStep = 'ocr' | 'lookup';
+export type AnalysisStep = 'read' | 'ocr' | 'lookup';
+
+/** Sunucudaki Claude Haiku'nun kapaktan okudukları (/api/recognize) */
+export interface CoverReading {
+  isBookCover: boolean;
+  title: string;
+  subtitle: string;
+  author: string;
+  translator: string;
+  publisher: string;
+  series: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export type CoverRecognizer = (image: string) => Promise<CoverReading>;
 
 export interface AnalysisResult {
   /** Forma yazılacak en iyi bilgi (çevrimiçi eşleşme veya kapaktan tahmin) */
@@ -244,6 +258,8 @@ export interface AnalysisResult {
 export interface AnalyzeOptions {
   library: readonly Book[];
   remote: RemoteSearch | null;
+  /** Varsa önce kapak bununla okunur; hata verirse OCR'a düşülür */
+  recognize?: CoverRecognizer | null;
   onStep?: (step: AnalysisStep) => void;
 }
 
@@ -260,8 +276,80 @@ function genreFromLibrary(author: string, library: readonly Book[]): string {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
 }
 
+/** Kitaplıkta aynı yazar farklı yazımla varsa kitaplıktaki yazımı kullan (Ümit/Umit, büyük/küçük harf…) */
+function libraryAuthorSpelling(author: string, library: readonly Book[]): string {
+  const key = fold(author);
+  if (!key) return author;
+  const existing = library.find((book) => fold(book.author) === key);
+  return existing?.author ?? author;
+}
+
+/** Claude ile okuma → Google Books/Open Library ile sayfa, yıl, tür tamamlama */
+async function analyzeWithReader(file: Blob, recognize: CoverRecognizer, options: AnalyzeOptions): Promise<AnalysisResult> {
+  options.onStep?.('read');
+  const reading = await recognize(await compressImage(file, 1000, 1500, 0.85));
+  if (!reading.isBookCover || !reading.title) {
+    return {
+      details: null,
+      candidates: [],
+      matched: false,
+      guess: null,
+      message: reading.isBookCover ? 'Kapakta başlık okunamadı. Daha net bir ön kapak fotoğrafı deneyin.' : 'Fotoğraf bir kitap kapağına benzemiyor.',
+    };
+  }
+
+  const author = libraryAuthorSpelling(reading.author, options.library);
+  options.onStep?.('lookup');
+  let ranked: { book: BookDetails; score: number }[] = [];
+  try {
+    const found = await searchBooks(reading.title, author.split(',')[0]?.trim() ?? '', options.remote);
+    const guess: CoverGuess = { tokens: [...tokenize(reading.title), ...tokenize(author)], author: author || null, publisher: null, title: reading.title, query: '', narrowQuery: '' };
+    ranked = found.map((book) => ({ book, score: scoreCandidate(book, guess) })).sort((a, b) => b.score - a.score);
+  } catch {
+    // tamamlama isteğe bağlı — okunanlar yine de yazılır
+  }
+  const best = ranked[0] && ranked[0].score >= 0.75 ? ranked[0].book : null;
+
+  const details: BookDetails = {
+    title: reading.title,
+    author,
+    publisher: reading.publisher || best?.publisher || '',
+    pageCount: best?.pageCount ?? 0,
+    genre: best?.genre || genreFromLibrary(author, options.library),
+    publicationYear: best?.publicationYear,
+    coverUrl: best?.coverUrl,
+    source: best?.source,
+  };
+  const note = reading.confidence === 'low' ? ' Okuma emin değil, kontrol edin.' : '';
+  return {
+    details,
+    candidates: ranked.filter((item) => item.book !== best).slice(0, 5).map((item) => item.book),
+    matched: reading.confidence !== 'low',
+    guess: null,
+    message: best
+      ? `Kapak okundu; sayfa/yıl ${best.source ?? 'çevrimiçi kaynak'} ile tamamlandı.${note}`
+      : `Kapak okundu; çevrimiçi kaynakta kayıt bulunamadı, sayfa ve yıl boş.${note}`,
+  };
+}
+
 /** Kapak fotoğraf(lar)ından kitap bilgisi çıkarır. İlk fotoğraf ön kapak kabul edilir. */
 export async function analyzeBookPhotos(files: readonly Blob[], options: AnalyzeOptions): Promise<AnalysisResult> {
+  let fallbackNote = '';
+  const front = files[0];
+  if (options.recognize && front) {
+    try {
+      return await analyzeWithReader(front, options.recognize, options);
+    } catch (error) {
+      // anahtar yok / kota / ağ → yerel OCR ile devam
+      fallbackNote = `Claude ile okunamadı (${error instanceof Error ? error.message : 'bilinmeyen hata'}); yerel OCR kullanıldı. `;
+    }
+  }
+  const result = await analyzeWithOcr(files, options);
+  return fallbackNote ? { ...result, message: fallbackNote + result.message } : result;
+}
+
+/** Yerel OCR (tesseract) ile okuma — yedek yol */
+async function analyzeWithOcr(files: readonly Blob[], options: AnalyzeOptions): Promise<AnalysisResult> {
   options.onStep?.('ocr');
   const words: OcrWord[] = [];
   for (const file of files.slice(0, 3)) words.push(...(await readCoverWords(file)));

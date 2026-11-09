@@ -72,6 +72,7 @@ Kök: `https://gelengitech.com/bookstore/api`. Tipler `src/types.ts` içinde. CO
 | POST | `/auth/login` `{password}` | – | `{token, expiresAt}` döner |
 | GET | `/auth/me` | (token) | `{authenticated}` |
 | GET | `/lookup?q=…` | ✓ | Google Books araması (vekil; `GOOGLE_BOOKS_API_KEY` sunucuda). `{items: volumeInfo[]}` |
+| POST | `/recognize` | ✓ | Kapak fotoğrafını (`{image: dataURL}`) Claude Haiku ile okur → `{title, author, publisher, …, confidence}` (`ANTHROPIC_API_KEY` sunucuda) |
 | GET | `/books` | – | Tüm kitaplar (`Book[]`) |
 | GET | `/books/:id` | – | Tek kitap |
 | GET | `/books/:id/cover?v=…` | – | Kapak görseli (uzun süreli önbellek) |

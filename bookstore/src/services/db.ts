@@ -2,7 +2,7 @@
 // Mobil uygulama da aynı uç noktaları kullanacak; sözleşme src/types.ts içinde.
 
 import type { ApiError, Book, BookInput, LoginResponse, ReadingStatus } from '../types';
-import type { GoogleVolumeInfo } from './bookLookup';
+import type { CoverReading, GoogleVolumeInfo } from './bookLookup';
 
 export class ApiRequestError extends Error {
   constructor(
@@ -23,6 +23,8 @@ export interface DbClient {
   checkSession(): Promise<boolean>;
   /** Google Books araması (yalnızca sahip; API anahtarı sunucuda) */
   lookup(query: string): Promise<GoogleVolumeInfo[]>;
+  /** Kapak fotoğrafını sunucudaki Claude Haiku ile okur (yalnızca sahip) */
+  recognize(image: string): Promise<CoverReading>;
   coverUrl(book: Book): string;
 }
 
@@ -76,6 +78,7 @@ export function createDbClient(apiBase: string, getToken: () => string): DbClien
     },
     login: (password) => request<LoginResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
     checkSession: async () => (await request<{ authenticated: boolean }>('/auth/me')).authenticated,
+    recognize: (image) => request<CoverReading>('/recognize', { method: 'POST', body: JSON.stringify({ image }) }),
     lookup: async (query) => (await request<{ items: GoogleVolumeInfo[] }>(`/lookup?q=${encodeURIComponent(query)}`)).items,
     coverUrl: (book) => (book.imageUrl ? `${origin}${book.imageUrl}` : ''),
   };

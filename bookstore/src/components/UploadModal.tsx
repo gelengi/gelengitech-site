@@ -1,11 +1,11 @@
-// Tekli kitap ekleme / düzenleme — ön kapak fotoğrafından (OCR) bilgi çıkarma + çevrimiçi arama
+// Tekli kitap ekleme / düzenleme — ön kapak fotoğrafından (Claude / OCR) bilgi çıkarma + çevrimiçi arama
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Camera, ImagePlus, ScanSearch, Search, Star, Trash2, Wand2 } from 'lucide-react';
 import type { Book, BookDetails, BookInput, ReadingStatus } from '../types';
 import { READING_STATUSES } from '../types';
 import { DEFAULT_GENRES } from '../lib/genres';
-import { analyzeBookPhotos, searchBooks, type AnalysisStep, type RemoteSearch } from '../services/bookLookup';
+import { analyzeBookPhotos, searchBooks, type AnalysisStep, type CoverRecognizer, type RemoteSearch } from '../services/bookLookup';
 import { compressImage } from '../services/image';
 import { BookCover } from './BookCover';
 import { Modal, Spinner, errorMessage } from './ui';
@@ -47,6 +47,7 @@ const EMPTY_FORM: FormState = {
 };
 
 const STEP_LABEL: Record<AnalysisStep, string> = {
+  read: 'Kapak okunuyor…',
   ocr: 'Kapak okunuyor… (ilk kullanımda dil verisi indirilir)',
   lookup: 'Kitap bilgileri aranıyor…',
 };
@@ -58,11 +59,12 @@ interface UploadModalProps {
   genres: readonly string[];
   library: readonly Book[];
   remote: RemoteSearch | null;
+  recognize: CoverRecognizer | null;
   onClose: () => void;
   onSubmit: (input: BookInput, bookId: number | null) => Promise<void>;
 }
 
-export function UploadModal({ open, book, existingCoverSrc, genres, library, remote, onClose, onSubmit }: UploadModalProps) {
+export function UploadModal({ open, book, existingCoverSrc, genres, library, remote, recognize, onClose, onSubmit }: UploadModalProps) {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [coverIndex, setCoverIndex] = useState(0);
@@ -165,7 +167,7 @@ export function UploadModal({ open, book, existingCoverSrc, genres, library, rem
       const ordered = [...photos.slice(coverIndex, coverIndex + 1), ...photos.filter((_, index) => index !== coverIndex)];
       const result = await analyzeBookPhotos(
         ordered.map((photo) => photo.file),
-        { library, remote, onStep: setStep },
+        { library, remote, recognize, onStep: setStep },
       );
       if (result.details) applyDetails(result.details);
       // Kendi ön kapak fotoğrafınız çevrimiçi küçük resimden daha net — kapak seçimi değişmez
