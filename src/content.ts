@@ -45,7 +45,7 @@ export const t = {
       heading: 'Nerede fark yaratırız',
       items: [
         { k: 'Hazine ve finansal piyasalar', v: 'Murex MX.3 ön ofis, FX/türev işlem platformları, implementasyon ve entegrasyon programları' },
-        { k: 'Temel bankacılık ve ALM', v: 'Yeni nesil temel bankacılık platformu teslimatı; ALM, FTP ve kârlılık (OFSAA) programları' },
+        { k: 'Temel bankacılık', v: 'Yeni nesil temel bankacılık platformu teslimatı ve entegrasyon programları' },
         { k: 'Ar-Ge', v: 'Konya Teknokent’te ardışık dört hazine veri modeli ve GenAI projesi' },
         { k: 'Çalışma modeli', v: 'Kurumunuzun ekibinin yanında, isimli ve kıdemli kaynakla' },
       ],
@@ -63,7 +63,7 @@ export const t = {
     about: {
       heading: 'Hakkımızda',
       p1: 'Gelengi Tech, Konya Teknokent’te yerleşik bir teknoloji ve yönetim danışmanlığı şirketidir. Finans sektöründe sistem entegrasyonu, hazine teknolojileri ve dönüşüm programları üzerine çalışıyoruz.',
-      p2: 'Kurucumuz Erhan Özer, bankacılık teknolojisinde 25 yılı aşkın deneyime sahiptir. Odeabank’ta on yılı aşkın süre proje yönetimi, iş analizi ve uygulama destek birimlerinin başında görev yaptı; Murex hazine ön ofisi, FX/türev işlem platformu, AML/uyum paketi ve OFSAA tabanlı entegre finansal kaynak yönetimi (ALM, FTP, kârlılık) programlarını yönetti, BDDK denetimlerini ve teknoloji bütçesini koordine etti. Daha önce Fortis, Eurobank Tekfen ve Intertech’te veri ambarı, CRM, finansal kontrol ve temel bankacılık projelerinde görev aldı.',
+      p2: 'Kurucumuz Erhan Özer, bankacılık teknolojisinde 25 yılı aşkın deneyime sahiptir. Odeabank’ta on yılı aşkın süre proje yönetimi, iş analizi ve uygulama destek birimlerinin başında görev yaptı; Murex hazine ön ofisi, FX/türev işlem platformu ve AML/uyum paketi programlarını yönetti, BDDK denetimlerini ve teknoloji bütçesini koordine etti. Daha önce Fortis, Eurobank Tekfen ve Intertech’te veri ambarı, CRM, finansal kontrol ve temel bankacılık projelerinde görev aldı.',
       p3: 'Büyük bir ekip yerine kıdemli ve isimli kaynakla çalışırız; çok paydaşlı programlarda bankanın, entegratörün ve yazılım üreticisinin aynı dili konuşmasını sağlarız. Taahhüt ettiğimiz kişi, projede fiilen çalışan kişidir.',
       facts: [
         { k: 'Kuruluş', v: 'Konya Teknokent' },
@@ -111,7 +111,7 @@ export const t = {
       heading: 'Where we make a difference',
       items: [
         { k: 'Treasury and capital markets', v: 'Murex MX.3 front office, FX and derivatives trading platforms, implementation and integration programmes' },
-        { k: 'Core banking and ALM', v: 'Next-generation core banking platform delivery; ALM, FTP and profitability (OFSAA) programmes' },
+        { k: 'Core banking', v: 'Next-generation core banking platform delivery and integration programmes' },
         { k: 'R&D', v: 'Four successive treasury data model and GenAI projects at Konya Teknokent' },
         { k: 'Engagement model', v: 'Named senior resources working alongside your team' },
       ],
@@ -129,7 +129,7 @@ export const t = {
     about: {
       heading: 'About',
       p1: 'Gelengi Tech is a technology and management consultancy based at Konya Teknokent, Turkey. We work on systems integration, treasury technology and transformation programmes in financial services.',
-      p2: 'Our founder, Erhan Özer, has more than 25 years in banking technology. He led project management, business analysis and application support at Odeabank for over a decade, running the Murex treasury front office, FX and derivatives trading platform, AML/compliance suite and OFSAA-based integrated financial resource management (ALM, FTP, profitability) programmes, and coordinating BRSA audits and the technology budget. Earlier roles at Fortis, Eurobank Tekfen and Intertech covered data warehouse, CRM, financial control and core banking projects.',
+      p2: 'Our founder, Erhan Özer, has more than 25 years in banking technology. He led project management, business analysis and application support at Odeabank for over a decade, running the Murex treasury front office, FX and derivatives trading platform and AML/compliance suite programmes, and coordinating BRSA audits and the technology budget. Earlier roles at Fortis, Eurobank Tekfen and Intertech covered data warehouse, CRM, financial control and core banking projects.',
       p3: 'We work with named senior resources rather than a large bench, and keep the bank, the integrator and the software vendor speaking the same language on multi-party programmes. The person we commit is the person who does the work.',
       facts: [
         { k: 'Based in', v: 'Konya Teknokent, Turkey' },
