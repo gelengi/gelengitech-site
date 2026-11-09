@@ -2,8 +2,9 @@
 import Base from '../layouts/Base.astro';
 import Sections from './Sections.astro';
 import Ledger from './Ledger.astro';
+import Library from './Library.astro';
 import { t, paths, type Lang } from '../content';
-interface Props { lang: Lang; page: 'home'|'services'|'work'|'about'|'contact'; }
+interface Props { lang: Lang; page: 'home'|'services'|'work'|'about'|'contact'|'library'; }
 const { lang, page } = Astro.props; const s = t[lang]; const p = paths[lang];
 const heads = { services: s.pillars.heading, work: s.work.heading, about: s.about.heading, contact: s.contact.heading } as const;
 ---
@@ -22,6 +23,8 @@ const heads = { services: s.pillars.heading, work: s.work.heading, about: s.abou
     <><div class="page-head"><div class="wrap"><h1>{heads.services}</h1></div></div><Sections lang={lang} show={['pillars','proof','cta']} /></>
   ) : page === 'work' ? (
     <><div class="page-head"><div class="wrap"><h1>{heads.work}</h1><p class="lead">{s.work.intro}</p></div></div><Sections lang={lang} show={['work','cta']} /></>
+  ) : page === 'library' ? (
+    <><div class="page-head"><div class="wrap"><h1>{s.library.heading}</h1><p class="lead">{s.library.intro}</p></div></div><Library lang={lang} /></>
   ) : page === 'about' ? (
     <><div class="page-head"><div class="wrap"><h1>{heads.about}</h1></div></div><Sections lang={lang} show={['about','proof','cta']} /></>
   ) : (

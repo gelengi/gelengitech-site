@@ -11,19 +11,31 @@ export const site = {
 };
 
 export const paths = {
-  tr: { home: '/', services: '/hizmetler/', work: '/calismalar/', about: '/hakkimizda/', contact: '/iletisim/' },
-  en: { home: '/en/', services: '/en/services/', work: '/en/work/', about: '/en/about/', contact: '/en/contact/' },
+  tr: { home: '/', services: '/hizmetler/', work: '/calismalar/', about: '/hakkimizda/', contact: '/iletisim/', library: '/kitaplik/' },
+  en: { home: '/en/', services: '/en/services/', work: '/en/work/', about: '/en/about/', contact: '/en/contact/', library: '/en/library/' },
 };
 
 export const t = {
   tr: {
-    nav: { services: 'Hizmetler', work: 'Çalışmalar', about: 'Hakkımızda', contact: 'İletişim', cta: 'Görüşme planlayın', switch: 'EN' },
+    nav: { services: 'Hizmetler', work: 'Çalışmalar', about: 'Hakkımızda', library: 'Kitaplık', contact: 'İletişim', cta: 'Görüşme planlayın', switch: 'EN' },
     meta: {
       home: { title: 'Gelengi Tech — Finans kurumları için teknoloji, strateji ve program yönetimi danışmanlığı', desc: 'Bankalar ve finans kurumları için hazine sistemleri (Murex MX.3), temel bankacılık entegrasyonu, veri mimarisi ve GenAI Ar-Ge. Konya Teknokent.' },
       services: { title: 'Hizmetler — Gelengi Tech', desc: 'Teknoloji ve strateji danışmanlığı, program yönetimi, hazine sistemleri, veri ve yapay zekâ.' },
       work: { title: 'Çalışmalar — Gelengi Tech', desc: 'Seçili projeler ve Ar-Ge çalışmaları.' },
       about: { title: 'Hakkımızda — Gelengi Tech', desc: 'Gelengi Tech kimdir, nasıl çalışır.' },
       contact: { title: 'İletişim — Gelengi Tech', desc: 'Görüşme planlayın.' },
+      library: { title: 'Kitaplık — Gelengi Tech', desc: 'Kurucumuzun kişisel kitaplığı: okunanlar, okunmakta olanlar ve sıradakiler.' },
+    },
+    library: {
+      heading: 'Kitaplık',
+      intro: 'Kurucumuz Erhan Özer’in kişisel kitaplığı. Raf, Kitaplığım uygulamasından canlı olarak çekilir; her kitap eklendiğinde burası da güncellenir.',
+      stats: { total: 'kitap', read: 'okundu', reading: 'okunuyor', unread: 'sırada', pages: 'sayfa' },
+      filters: { all: 'Tümü', read: 'Okundu', reading: 'Okunuyor', unread: 'Okunmadı' },
+      open: 'Kitaplığım uygulamasını aç',
+      loading: 'Raf hazırlanıyor…',
+      empty: 'Rafta henüz kitap yok.',
+      error: 'Kitaplık şu an yüklenemedi. Lütfen daha sonra tekrar deneyin.',
+      pagesShort: 's.',
     },
     hero: {
       kicker: 'Finans kurumları için teknoloji ve strateji danışmanlığı',
@@ -83,13 +95,25 @@ export const t = {
     footer: { rights: 'Tüm hakları saklıdır.', tagline: 'Finans kurumları için teknoloji, strateji ve program yönetimi.' },
   },
   en: {
-    nav: { services: 'Services', work: 'Work', about: 'About', contact: 'Contact', cta: 'Book a call', switch: 'TR' },
+    nav: { services: 'Services', work: 'Work', about: 'About', library: 'Library', contact: 'Contact', cta: 'Book a call', switch: 'TR' },
     meta: {
       home: { title: 'Gelengi Tech — Technology, strategy and programme management consulting for financial institutions', desc: 'Treasury systems (Murex MX.3), core banking integration, data architecture and GenAI R&D for banks and financial institutions. Konya Teknokent, Turkey.' },
       services: { title: 'Services — Gelengi Tech', desc: 'Technology and strategy consulting, programme management, treasury systems, data and AI.' },
       work: { title: 'Work — Gelengi Tech', desc: 'Selected projects and R&D.' },
       about: { title: 'About — Gelengi Tech', desc: 'Who we are and how we work.' },
       contact: { title: 'Contact — Gelengi Tech', desc: 'Book a call.' },
+      library: { title: 'Library — Gelengi Tech', desc: 'Our founder’s personal library: read, reading and up next.' },
+    },
+    library: {
+      heading: 'Library',
+      intro: 'The personal library of our founder, Erhan Özer. The shelf is pulled live from the Kitaplığım app, so it updates whenever a book is added.',
+      stats: { total: 'books', read: 'read', reading: 'reading', unread: 'up next', pages: 'pages' },
+      filters: { all: 'All', read: 'Read', reading: 'Reading', unread: 'Unread' },
+      open: 'Open the Kitaplığım app',
+      loading: 'Setting up the shelf…',
+      empty: 'No books on the shelf yet.',
+      error: 'The library could not be loaded right now. Please try again later.',
+      pagesShort: 'pp.',
     },
     hero: {
       kicker: 'Technology and strategy consulting for financial institutions',

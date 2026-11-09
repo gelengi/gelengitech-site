@@ -5,7 +5,7 @@ interface Props { lang: Lang; page: string; }
 const { lang, page } = Astro.props;
 const s = t[lang].nav; const p = paths[lang];
 const other: Lang = lang === 'tr' ? 'en' : 'tr';
-const links = [['services', s.services], ['work', s.work], ['about', s.about], ['contact', s.contact]] as const;
+const links = [['services', s.services], ['work', s.work], ['about', s.about], ['library', s.library], ['contact', s.contact]] as const;
 ---
 <header class="site-header">
   <div class="wrap">

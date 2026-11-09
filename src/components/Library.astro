@@ -1,0 +1,130 @@
+---
+import { t, type Lang } from '../content';
+interface Props { lang: Lang; }
+const { lang } = Astro.props;
+const s = t[lang].library;
+---
+<section class="section library" data-library data-lang={lang}>
+  <div class="wrap">
+    <div class="lib-top">
+      <dl class="lib-stats" data-stats hidden>
+        <div><dt data-stat="total">0</dt><dd>{s.stats.total}</dd></div>
+        <div><dt data-stat="read">0</dt><dd>{s.stats.read}</dd></div>
+        <div><dt data-stat="reading">0</dt><dd>{s.stats.reading}</dd></div>
+        <div><dt data-stat="unread">0</dt><dd>{s.stats.unread}</dd></div>
+        <div><dt data-stat="pages">0</dt><dd>{s.stats.pages}</dd></div>
+      </dl>
+      <div class="lib-filters" role="group" data-filters hidden>
+        <button type="button" class="chip" data-filter="all" aria-pressed="true">{s.filters.all}</button>
+        <button type="button" class="chip" data-filter="Okundu" aria-pressed="false">{s.filters.read}</button>
+        <button type="button" class="chip" data-filter="Okunuyor" aria-pressed="false">{s.filters.reading}</button>
+        <button type="button" class="chip" data-filter="Okunmadı" aria-pressed="false">{s.filters.unread}</button>
+      </div>
+    </div>
+
+    <p class="lib-status muted" data-status>{s.loading}</p>
+    <div class="shelves" data-shelves aria-live="polite"></div>
+
+    <p class="lib-open"><a class="btn btn-ghost" href="/bookstore/">{s.open}</a></p>
+  </div>
+</section>
+
+<script define:vars={{ empty: s.empty, error: s.error, pagesShort: s.pagesShort }}>
+  const root = document.querySelector('[data-library]');
+  const shelves = root.querySelector('[data-shelves]');
+  const status = root.querySelector('[data-status]');
+  const statsEl = root.querySelector('[data-stats]');
+  const filtersEl = root.querySelector('[data-filters]');
+  const SPINES = ['#0e2235', '#1b3449', '#24405a', '#1d5bff', '#0b3fd1', '#4a5a6a', '#35506a', '#2c3e50'];
+  let books = []; let filter = 'all';
+
+  const hash = (str) => { let h = 0; for (const c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+  const fmt = (n) => n.toLocaleString(root.dataset.lang === 'tr' ? 'tr-TR' : 'en-GB');
+
+  function render() {
+    const list = books.filter((b) => filter === 'all' || b.status === filter)
+      .sort((a, b) => (a.author || '').localeCompare(b.author || '', 'tr') || a.title.localeCompare(b.title, 'tr'));
+    shelves.innerHTML = '';
+    if (!list.length) { status.hidden = false; status.textContent = empty; return; }
+    status.hidden = true;
+
+    // Raf genişliğine göre satırlara böl; sırt genişliği sayfa sayısına, yüksekliği başlığa göre değişir
+    const avail = shelves.clientWidth || 900;
+    let row = null, used = 0;
+    const newRow = () => { row = document.createElement('div'); row.className = 'shelf'; shelves.appendChild(row); used = 0; };
+    newRow();
+    for (const b of list) {
+      const w = Math.max(26, Math.min(58, 22 + Math.round((b.pageCount || 250) / 14)));
+      const h = 150 + (hash(b.title) % 5) * 10;
+      if (used + w + 3 > avail) newRow();
+      used += w + 3;
+      const a = document.createElement('a');
+      a.className = 'spine' + (b.status === 'Okunuyor' ? ' is-reading' : b.status === 'Okundu' ? ' is-read' : '');
+      a.href = '/bookstore/';
+      a.style.cssText = `--w:${w}px;--h:${h}px;--c:${SPINES[hash(b.author + b.title) % SPINES.length]}`;
+      a.setAttribute('aria-label', `${b.title}${b.author ? ' — ' + b.author : ''}`);
+      a.innerHTML = `<span class="spine-title">${esc(b.title)}</span><span class="spine-author">${esc(b.author || '')}</span>
+        <span class="spine-tip"><strong>${esc(b.title)}</strong>${b.author ? `<br>${esc(b.author)}` : ''}${b.pageCount ? `<br><span class="muted">${fmt(b.pageCount)} ${pagesShort}</span>` : ''}</span>`;
+      row.appendChild(a);
+    }
+  }
+  function esc(x) { return String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  function stats() {
+    const n = (st) => books.filter((b) => b.status === st).length;
+    const set = (k, v) => { statsEl.querySelector(`[data-stat="${k}"]`).textContent = fmt(v); };
+    set('total', books.length); set('read', n('Okundu')); set('reading', n('Okunuyor')); set('unread', n('Okunmadı'));
+    set('pages', books.reduce((acc, b) => acc + (b.pageCount || 0), 0));
+    statsEl.hidden = false; filtersEl.hidden = false;
+  }
+
+  filtersEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-filter]'); if (!btn) return;
+    filter = btn.dataset.filter;
+    filtersEl.querySelectorAll('[data-filter]').forEach((x) => x.setAttribute('aria-pressed', String(x === btn)));
+    render();
+  });
+  let rt; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 120); });
+
+  fetch('/bookstore/api/books', { headers: { Accept: 'application/json' } })
+    .then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+    .then((data) => { books = Array.isArray(data) ? data : []; stats(); render(); })
+    .catch(() => { status.hidden = false; status.textContent = error; });
+</script>
+
+<style is:global>
+  .library .wrap { padding-top: clamp(32px, 4vw, 48px); }
+  .lib-top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1.2rem 2rem; margin-bottom: 2rem; }
+  .lib-stats { display: flex; flex-wrap: wrap; gap: 1.6rem 2.4rem; margin: 0; }
+  .lib-stats div { border-left: 2px solid var(--signal); padding-left: .8rem; }
+  .lib-stats dt { font-family: var(--display); font-size: 1.7rem; line-height: 1; }
+  .lib-stats dd { margin: .25rem 0 0; color: var(--slate); font-size: .9rem; }
+  .lib-filters { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .chip { font: inherit; font-size: .88rem; padding: .4rem .8rem; border-radius: 999px; border: 1px solid var(--mist); background: var(--white); color: var(--ink-2); cursor: pointer; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--white); border-color: var(--ink); }
+  .lib-status { margin: 1rem 0; }
+
+  .shelves { display: grid; gap: 0; }
+  .shelf { display: flex; align-items: flex-end; gap: 3px; padding: 0 clamp(8px, 2vw, 24px) 0; min-height: 200px;
+    border-bottom: 14px solid var(--ink); position: relative; margin-bottom: 26px; }
+  .shelf::after { content: ''; position: absolute; left: 0; right: 0; bottom: -26px; height: 12px; background: linear-gradient(to bottom, rgba(14,34,53,.18), transparent); }
+
+  .spine { position: relative; width: var(--w); height: var(--h); background: var(--c); color: #fff; border-radius: 2px 2px 0 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 10px 0 8px; text-decoration: none;
+    box-shadow: inset -3px 0 6px rgba(0,0,0,.25), inset 2px 0 3px rgba(255,255,255,.12); transition: transform .18s ease; flex: 0 0 auto; }
+  .spine:hover, .spine:focus-visible { transform: translateY(-8px); text-decoration: none; z-index: 2; }
+  .spine-title, .spine-author { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-height: 100%; }
+  .spine-title { font-family: var(--display); font-size: .9rem; letter-spacing: .01em; }
+  .spine-author { font-size: .62rem; opacity: .75; max-height: 40%; }
+  .spine.is-reading::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: #ffd166; }
+  .spine.is-read .spine-title { opacity: .95; }
+  .spine:not(.is-read):not(.is-reading) { filter: saturate(.55) brightness(1.08); }
+
+  .spine-tip { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); background: var(--white); color: var(--ink);
+    border: 1px solid var(--mist); border-radius: 6px; padding: .55rem .75rem; font-size: .85rem; line-height: 1.35; white-space: nowrap;
+    box-shadow: 0 8px 24px rgba(14,34,53,.14); opacity: 0; pointer-events: none; transition: opacity .15s; writing-mode: horizontal-tb; }
+  .spine:hover .spine-tip, .spine:focus-visible .spine-tip { opacity: 1; }
+  .lib-open { margin-top: 1.5rem; }
+  @media (max-width: 640px) { .lib-stats dt { font-size: 1.4rem; } .shelf { min-height: 170px; } .spine-tip { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .spine { transition: none; } }
+</style>
