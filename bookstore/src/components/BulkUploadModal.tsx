@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Clock, ImagePlus, Save, Trash2, UploadCloud } from 'lucide-react';
 import type { Book, BookDetails, BookInput, ReadingStatus } from '../types';
 import { READING_STATUSES } from '../types';
-import { analyzeBookPhotos, type RemoteSearch } from '../services/bookLookup';
+import { analyzeBookPhotos, type CoverRecognizer, type RemoteSearch } from '../services/bookLookup';
 import { compressImage } from '../services/image';
 import { Modal, Spinner, errorMessage } from './ui';
 
@@ -31,13 +31,14 @@ interface BulkUploadModalProps {
   open: boolean;
   library: readonly Book[];
   remote: RemoteSearch | null;
+  recognize: CoverRecognizer | null;
   onClose: () => void;
   onSave: (input: BookInput) => Promise<void>;
 }
 
 const MAX_FILES = 60;
 
-export function BulkUploadModal({ open, library, remote, onClose, onSave }: BulkUploadModalProps) {
+export function BulkUploadModal({ open, library, remote, recognize, onClose, onSave }: BulkUploadModalProps) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [defaultStatus, setDefaultStatus] = useState<ReadingStatus>('Okunmadı');
   const [running, setRunning] = useState(false);
@@ -76,13 +77,14 @@ export function BulkUploadModal({ open, library, remote, onClose, onSave }: Bulk
           const result = await analyzeBookPhotos([next.file], {
             library,
             remote,
-            onStep: (step) => update(next.id, { message: step === 'ocr' ? 'Kapak okunuyor…' : 'Bilgiler aranıyor…' }),
+            recognize,
+            onStep: (step) => update(next.id, { message: step === 'lookup' ? 'Bilgiler aranıyor…' : 'Kapak okunuyor…' }),
           });
           const d = result.details;
           if (d && d.title) {
             update(next.id, {
               status: 'completed',
-              message: result.matched ? `${d.source ?? 'Çevrimiçi'} ile eşleşti — kontrol edin` : 'Kapaktan tahmin — kontrol edin',
+              message: result.message,
               title: d.title,
               author: d.author,
               publisher: d.publisher,

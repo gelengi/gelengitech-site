@@ -117,13 +117,12 @@ export function SettingsModal({ open, config, canEdit, onClose, onSave, onLogin,
             <h3 className="font-serif text-base font-semibold">Kitap Tanıma</h3>
           </div>
           <p className="-mt-2 text-sm leading-relaxed text-muted">
-            Ön kapak fotoğrafındaki yazılar tarayıcıda okunur (OCR). Yazar ve yayınevi önce kitaplığınızdaki adlarla eşleştirilir, ardından
-            Google Books ve Open Library’de aranır. Yapay zekâ servisi kullanılmaz; ilk kullanımda ~15 MB dil verisi indirilir.
+            Ön kapak fotoğrafı sunucu üzerinden Claude Haiku ile okunur (başlık, yazar, yayınevi); sayfa sayısı ve yıl Google Books / Open Library'den
+            tamamlanır. Claude kullanılamazsa tarayıcıdaki OCR devreye girer (ilk kullanımda ~15 MB dil verisi indirilir).
           </p>
           <p className="rounded-xl border border-line bg-white p-3.5 text-xs leading-relaxed text-muted">
-            Türkçe kitaplarda en iyi sonuç için sunucuda <code className="font-mono text-ink">GOOGLE_BOOKS_API_KEY</code> tanımlı olmalı
-            (Cloudflare → Worker → Settings → Variables and Secrets). Anahtar tarayıcıya gönderilmez; tanımlı değilse yalnızca Open Library ve kapak
-            tahmini kullanılır.
+            Sunucuda <code className="font-mono text-ink">ANTHROPIC_API_KEY</code> (kapak okuma) ve <code className="font-mono text-ink">GOOGLE_BOOKS_API_KEY</code> (sayfa/yıl) tanımlı olmalı
+            (Cloudflare → Worker → Settings → Variables and Secrets). Anahtarlar tarayıcıya gönderilmez.
           </p>
         </section>
 

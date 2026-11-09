@@ -458,10 +458,11 @@ export default function App() {
             genres={genres}
             library={books}
             remote={db.lookup}
+            recognize={db.recognize}
             onClose={() => setEditor({ open: false, book: null })}
             onSubmit={submitBook}
           />
-          <BulkUploadModal open={bulkOpen} library={books} remote={db.lookup} onClose={() => setBulkOpen(false)} onSave={saveBulkBook} />
+          <BulkUploadModal open={bulkOpen} library={books} remote={db.lookup} recognize={db.recognize} onClose={() => setBulkOpen(false)} onSave={saveBulkBook} />
           <BulkBar count={selectedIds.size} busy={bulkBusy} onSetStatus={(status) => void bulkSetStatus(status)} onClear={() => setSelectedIds(new Set())} />
         </>
       )}

@@ -23,6 +23,8 @@ export interface Env {
   SESSION_SECRET?: string;
   /** İsteğe bağlı: `wrangler secret put GOOGLE_BOOKS_API_KEY` — kapak tanımada Google Books araması için */
   GOOGLE_BOOKS_API_KEY?: string;
+  /** İsteğe bağlı: `wrangler secret put ANTHROPIC_API_KEY` — kapak fotoğrafını Claude Haiku ile okumak için */
+  ANTHROPIC_API_KEY?: string;
 }
 
 const API_PREFIX = '/bookstore/api';
@@ -400,6 +402,90 @@ async function googleBooksLookup(env: Env, rawQuery: string): Promise<{ items: u
   return { items: (data.items ?? []).flatMap((item) => (item.volumeInfo ? [item.volumeInfo] : [])) };
 }
 
+// ---------------------------------------------------------------- Kapak tanıma (Claude Haiku)
+
+const RECOGNIZE_MODEL = 'claude-haiku-5-5';
+const RECOGNIZE_PROMPT = `Bu bir kitap kapağı fotoğrafı (çoğunlukla Türkçe kitaplar). Kapakta yazanları oku ve YALNIZCA şu JSON'u döndür, başka hiçbir şey yazma:
+{"isBookCover": true, "title": "", "subtitle": "", "author": "", "translator": "", "publisher": "", "series": "", "confidence": "high"}
+Kurallar:
+- title: kitabın asıl adı, kapakta göründüğü gibi ama normal büyük/küçük harf kullanımıyla ("ROMA'NIN BEŞ GÜNÜ" → "Roma'nın Beş Günü"). Türkçe karakterleri (ç, ğ, ı, İ, ö, ş, ü) doğru yaz.
+- author: yazar(lar), virgülle ayrılmış; çevirmen, editör veya önsöz yazarı değil.
+- publisher: yayınevinin tam adı; logodan anlaşılıyorsa açık adını yaz (YKY → Yapı Kredi Yayınları, DK → Doğan Kitap).
+- "Bir X Kitabı", ödül, "çok satan" gibi tanıtım yazılarını başlığa katma; seri/dizi adını series alanına yaz.
+- Okuyamadığın alanı boş bırak; uydurma. Emin değilsen confidence "low" olsun. Kitap kapağı değilse isBookCover false.`;
+
+interface CoverReading {
+  isBookCover: boolean;
+  title: string;
+  subtitle: string;
+  author: string;
+  translator: string;
+  publisher: string;
+  series: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+async function recognizeCover(env: Env, image: unknown): Promise<CoverReading> {
+  if (!env.ANTHROPIC_API_KEY) throw new HttpError(503, 'Kapak tanıma kapalı — sunucuda ANTHROPIC_API_KEY tanımlı değil');
+  const match = typeof image === 'string' ? /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(image) : null;
+  if (!match?.[1] || !match[2]) throw new HttpError(400, 'Görsel data URL (jpeg/png/webp) olmalıdır');
+  if (match[2].length * 0.75 > MAX_IMAGE_BYTES) throw new HttpError(413, 'Görsel çok büyük');
+
+  let response: Response;
+  try {
+    response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: RECOGNIZE_MODEL,
+        max_tokens: 600,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: match[1], data: match[2] } },
+              { type: 'text', text: RECOGNIZE_PROMPT },
+            ],
+          },
+        ],
+      }),
+    });
+  } catch {
+    throw new HttpError(502, 'Claude API’ye ulaşılamadı');
+  }
+  if (!response.ok) {
+    let detail = '';
+    try {
+      detail = ((await response.json()) as { error?: { message?: string } }).error?.message ?? '';
+    } catch {
+      // gövde JSON değil
+    }
+    throw new HttpError(502, `Claude API yanıt vermedi (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
+  }
+  const data = (await response.json()) as { content?: { type: string; text?: string }[] };
+  const text = (data.content ?? []).filter((part) => part.type === 'text').map((part) => part.text ?? '').join('');
+  const jsonText = /\{[\s\S]*\}/.exec(text)?.[0];
+  if (!jsonText) throw new HttpError(502, 'Kapak okunamadı (beklenmeyen yanıt)');
+  let parsed: Partial<Record<keyof CoverReading, unknown>>;
+  try {
+    parsed = JSON.parse(jsonText) as typeof parsed;
+  } catch {
+    throw new HttpError(502, 'Kapak okunamadı (yanıt çözümlenemedi)');
+  }
+  const field = (value: unknown, max = 300) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
+  const confidence = parsed.confidence === 'high' || parsed.confidence === 'medium' ? parsed.confidence : 'low';
+  return {
+    isBookCover: parsed.isBookCover !== false,
+    title: field(parsed.title),
+    subtitle: field(parsed.subtitle),
+    author: field(parsed.author),
+    translator: field(parsed.translator),
+    publisher: field(parsed.publisher),
+    series: field(parsed.series),
+    confidence,
+  };
+}
+
 // ---------------------------------------------------------------- routes
 
 async function handleApi(request: Request, env: Env, path: string): Promise<Response> {
@@ -434,6 +520,13 @@ async function handleApi(request: Request, env: Env, path: string): Promise<Resp
   if (segments[0] === 'lookup' && segments.length === 1 && method === 'GET') {
     await requireAuth(request, env);
     return json(await googleBooksLookup(env, new URL(request.url).searchParams.get('q') ?? ''));
+  }
+
+  // POST /recognize {image: dataURL} — kapak fotoğrafından başlık/yazar/yayınevi (Claude Haiku; yalnızca sahip)
+  if (segments[0] === 'recognize' && segments.length === 1 && method === 'POST') {
+    await requireAuth(request, env);
+    const body = await readJson<{ image?: unknown }>(request);
+    return json(await recognizeCover(env, body.image));
   }
 
   if (segments[0] !== 'books') throw new HttpError(404, 'Bulunamadı');
