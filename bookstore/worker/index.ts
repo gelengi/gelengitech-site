@@ -438,7 +438,8 @@ async function recognizeCover(env: Env, image: unknown): Promise<CoverReading> {
       headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({
         model: RECOGNIZE_MODEL,
-        max_tokens: 600,
+        // model yanıttan önce düşünebiliyor; sınır düşük olursa JSON'a sıra gelmeden kesiliyor
+        max_tokens: 4000,
         messages: [
           {
             role: 'user',
@@ -462,10 +463,10 @@ async function recognizeCover(env: Env, image: unknown): Promise<CoverReading> {
     }
     throw new HttpError(502, `Claude API yanıt vermedi (${response.status})${detail ? `: ${detail.slice(0, 200)}` : ''}`);
   }
-  const data = (await response.json()) as { content?: { type: string; text?: string }[] };
+  const data = (await response.json()) as { content?: { type: string; text?: string }[]; stop_reason?: string };
   const text = (data.content ?? []).filter((part) => part.type === 'text').map((part) => part.text ?? '').join('');
   const jsonText = /\{[\s\S]*\}/.exec(text)?.[0];
-  if (!jsonText) throw new HttpError(502, 'Kapak okunamadı (beklenmeyen yanıt)');
+  if (!jsonText) throw new HttpError(502, `Kapak okunamadı (yanıt: ${data.stop_reason ?? '?'}${text ? `, "${text.slice(0, 80)}"` : ''})`);
   let parsed: Partial<Record<keyof CoverReading, unknown>>;
   try {
     parsed = JSON.parse(jsonText) as typeof parsed;
